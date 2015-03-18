@@ -1,5 +1,7 @@
+#include <vector>
 #include "opencv2/opencv.hpp"
 
+using namespace std;
 using namespace cv;
 
 int main(int, char**)
@@ -8,19 +10,26 @@ int main(int, char**)
     if(!cap.isOpened())  // check if we succeeded
 	return -1;
 
-    Mat edges;
-    namedWindow("edges",1);
+    vector<int> compression_params;
+    compression_params.push_back(CV_IMWRITE_PNG_COMPRESSION);
+    compression_params.push_back(9);
+
+    int index = 0;
+    char name[1000];
+
+    vector<Mat> frames;
+
     for(;;)
     {
 	Mat frame;
 	cap >> frame; // get a new frame from camera
-	cvtColor(frame, edges, CV_BGR2GRAY);
-	GaussianBlur(edges, edges, Size(7,7), 1.5, 1.5);
-	Canny(edges, edges, 0, 30, 3);
-	imshow("edges", edges);
-	if(waitKey(30) >= 0) break;
+	frames.push_back(frame);
+	if(index++>99) break;
     }
-    // the camera will be deinitialized automatically in VideoCapture destructor
+    for(int i=0; i<frames.size(); ++i) {
+	sprintf(name, "input_seq/im%02d.png", i);
+	imwrite(name, frames[i], compression_params);
+    }
     return 0;
 }
 

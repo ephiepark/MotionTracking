@@ -1,0 +1,101 @@
+Motion Tracking
+===============
+
+This tarball contains all code required to run the tracking algorithm
+on a sequence of images. 
+
+Run the file run_tracker.m in Matlab and follow the instructions. You
+will need to have a directory of sequentially numbered images
+available. Example sequences are available from the project website at
+http://www.cs.berkeley.edu/~flw/tracker/. After entering the path and
+file types the tracker will begin processing.
+
+Once the data window appears the algorithm begins building a
+background model and attempts to track objects. By clicking on any of
+the four subwindows you can investigate the background representation
+(a Mixture of Gaussians) of any pixel. The two windows that then
+appear display the mixture once as a two-dimensional scatter plot
+(ignoring the blue colour component), and once as a one-dimensional
+evolution of the red colour component only. These plots make the
+internal processing visible and should help determining suitable
+parameters to be set in mixture_parameters.m.
+
+Configuration: The algorithm is controlled by a number of parameters
+and options. While an attempt has been made to select useful
+parameters for many applications, specific situations may require
+tweaks. The following files are points where adjustments can be made.
+
+src/mixture_parameters.m
+
+This file contains all parameters concerning the construction and
+maintenance of the background model up to the detection of foreground
+blobs. If you find that the foreground detection is deficient then
+this is a good place to start modifying parameters. The file lists a
+set of parameter combinations that were used on various sequences that
+can be useful in determining suitable parameter ranges. The default
+parameters are those for the ant sequence.
+
+src/kalman_parameters.m
+
+This file contains all parameters concerning the tracking of object
+states through the Kalman filter, as well as some parameters required
+for matching new blobs to previously tracked objects. If the tracking
+of object fails although the blobs are sufficiently accurate, then
+modifications in this part can be beneficial. 
+
+If the Kalman filer option 
+
+kalparam.ASSOC_ALG_TYPE = 'LAP' 
+
+is set in kalman_parameters, the algorithm uses a C++ solver for the
+linear assignment problem in src/lap/lap.cpp that must be mex-compiled
+before the tracker can function. My code is set up to try to
+automatically compile the file src/lap/lap.cpp using mex should it
+detect that it has not yet been compiled. This will usually result in
+an informative message when you run the tracker for the first time on
+your system, followed by Matlab exiting (this is normal). Should
+automatic compilation of the file src/lap/lap.cpp fail (i.e. upon
+restarting Matlab you get the same informative message as before),
+then your system is probably not set up correctly and you should
+investigate how to manually mex-compile the file src/lap/lap.cpp. The
+compiler you need to use depends on the version of Matlab you are
+using as well as the operating system you use. The Mathworks website
+has a list of compilers as well as operating systems. If this fails,
+you may want to use 'MUNK' or 'SMP' for this option instead. 
+
+src/track.m
+
+At the beginning of the file are some parameters that control higher
+functions of the algorithm. For example, instead of working in the
+usual RGB colour space, one can enable processing in chromaticity
+coordinates by changing the control variable DO_CHROMATICITY.
+
+Files in the subdirectory misc were used during testing and
+development and contains some useful functions. The most useful one is
+extract_trajectories.m. By default after run_tracker has finished, you
+should have a structure array object_hist on your workspace (the
+structure will be empty in case SAVE_OBJECT_HISTORY = 0 in track.m).
+This structure array contains most information about all tracked
+objects that were seen. You can extract tracks from this data using
+extract_trajectories.m
+
+Acknowledgements: 
+
+I thank MagicLogic for making the code for the Linear Assignment
+Problem available. The original code can be found at
+http://www.magiclogic.com/assignment.html. Please consult their
+website regarding their copyright policy. I would like to thank Drea
+Thomas for making the suptitle.m script available. It can be
+downloaded at
+http://www.mathworks.com/matlabcentral/fileexchange/loadFile.do?objectId=3233&objectType=file.
+The file parseXML.m in the misc subdirectory was borrowed from the
+mathworks website and can be found at
+http://www.mathworks.com/access/helpdesk/help/techdoc/ref/index.html?/access/helpdesk/help/techdoc/ref/xmlread.html.
+Ken Ho added the Munkres algorithm (munkres.m) to the tracker, which
+can be used instead of the lap.cpp code. The original munkres.m file
+was written by Yi Cao at Cranfield University on 10th July 2008.
+
+All code which I developed is released under the GPL license.
+
+I greatly appreciate comments and suggestions.
+Fabian Wauthier <flw@berkeley.edu>, 18th November 2011

@@ -1,5 +1,11 @@
 #ifndef __HELPER_FUNCTIONS_H__
 #define __HELPER_FUNCTIONS_H__
+
+struct gaussian {
+    float mean;
+    float variance;
+};
+
 int is_match(pixel x_t, gaussian g, float t);
 float update_weight(float w, float l_a, int m);
 void update_distribution(pixel x_t, float mean, float variance);

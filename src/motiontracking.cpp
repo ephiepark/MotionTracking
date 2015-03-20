@@ -1,6 +1,8 @@
 #include <vector>
 #include "opencv2/opencv.hpp"
 
+#include "helper_functions.h"
+
 #define K 3
 #define L_A 0.5 // learning rate
 

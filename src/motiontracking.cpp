@@ -1,4 +1,6 @@
 #include <vector>
+#include <cstdlib>
+#include <ctime>
 #include "opencv2/opencv.hpp"
 
 #include "helper_functions.h"
@@ -28,6 +30,26 @@ int main(int, char**)
     struct gaussian g[height][width][K][3];
     float w[height][width][K];
 
+    Mat frame0;
+    cap >> frame0;
+    srand(time(0));
+    for (int i=0; i<height; i++) {
+        for (int j=0; j<width; j++) {
+            for (int k=0; k<K; k++) {
+                g[i][j][k][0].mean = rand() % 256;
+                g[i][j][k][1].mean = rand() % 256;
+                g[i][j][k][2].mean = rand() % 256;
+                g[i][j][k][0].variance = INIT_VARIANCE;
+                g[i][j][k][1].variance = INIT_VARIANCE;
+                g[i][j][k][2].variance = INIT_VARIANCE;
+                w[i][j][k] = 0;
+            }
+            g[i][j][0][0].mean = frame0.at<cv::Vec3b>(i, j)[0];
+            g[i][j][0][1].mean = frame0.at<cv::Vec3b>(i, j)[1];
+            g[i][j][0][2].mean = frame0.at<cv::Vec3b>(i, j)[2];    
+            w[i][j][0] = 1;
+        }
+    }
     for(;;)
     {
         Mat frame;
@@ -49,17 +71,44 @@ int main(int, char**)
                         min_ind = k;
                     }
                 }
+                if (min > DEVIATION_SQ_THRESH) {
+                    min_ind = -1;
+                }
                 for (int k=0; k<K; k++) {
                     if (k == min_ind) {
                         w[i][j][k] = update_weight(w[i][j][k], L_A, 1);
                         update_distribution(p_r, g[i][j][k][0]);
                         update_distribution(p_g, g[i][j][k][1]);
                         update_distribution(p_b, g[i][j][k][2]);
-                        is_background(k, w[i][j]) 
                     }else{
                         w[i][j][k] = update_weight(w[i][j][k], L_A, 0);
                     }
                 }
+                if (min_ind == -1) {
+                    min = -1;
+                    for (int k=0; k<K; k++) {
+                        if (min == -1 || min > w[i][j][k]) { // replacement policy can be changed
+                            min = w[i][j][k];
+                            min_ind = k;
+                        }
+                    }
+                    g[i][j][min_ind][0].mean = p_r;
+                    g[i][j][min_ind][0].variance = INIT_VARIANCE;
+                    g[i][j][min_ind][1].mean = p_g;
+                    g[i][j][min_ind][1].variance = INIT_VARIANCE;
+                    g[i][j][min_ind][2].mean = p_b;
+                    g[i][j][min_ind][2].variance = INIT_VARIANCE;
+                    w[i][j][min_ind] = INIT_MIXPROP;
+                }
+                // renormalized weight
+                float sum = 0;
+                for (int k=0; k<K; k++) {
+                    sum += w[i][j][k];
+                }
+                for (int k=0; k<K; k++) {
+                    w[i][j][k] = w[i][j][k] / sum;
+                }
+                
                 if (is_background(min_ind, w[i][j], g[i][j])){
                     // background
                 }else{
@@ -69,9 +118,6 @@ int main(int, char**)
                     frame.at<cv::Vec3b>(i, j)[1] = 0;
                     frame.at<cv::Vec3b>(i, j)[2] = 0;
                 }
-                // TODO replacing unmatched case...
-                // renormalized
-                // initialize gaussians
             }
         }
     }

@@ -1,6 +1,8 @@
 #include <cmath>
 #include "helper_functions.h"
 
+using std::swap;
+
 // when given a gaussian distribution g, a current pixel x_t, returns the Z-score 
 float getZ(int x_t, const gaussian &g) {
     return (x_t - g.mean) / sqrt(g.variance);
@@ -19,7 +21,7 @@ float update_weight(float w, float l_a, int m) {
 void update_distribution(int x_t, gaussian &g) {
     g.mean = (1.0 - RHO) * g.mean + RHO * x_t;
     // matlab code uses same variance for 3 colors... 
-    g.variance = (1.0 - RHO) * g.variance + RHO * (x_t - g.mean) ^ 2;
+    g.variance = (1.0 - RHO) * g.variance + RHO * (x_t - g.mean) * (x_t - g.mean);
 }
 
 // TODO B = argmin_b(sum(1, b) w > T)
@@ -28,7 +30,7 @@ int num_background(float t, float *weights) {
 }
 
 inline float weight_over_sigma(float weight, float v1, float v2, float v3) {
-    return w / (v1*v2*v3)^(1/6);
+    return weight / pow(v1*v2*v3, 1.0/6.0);
 }
 
 int is_background(int selected_gaussian, float w[K], struct gaussian g[K][3]) {
@@ -42,22 +44,11 @@ int is_background(int selected_gaussian, float w[K], struct gaussian g[K][3]) {
         for (int j=0; j<K-1; j++) {
             if (weight_over_sigma(w[j], g[j][0].variance, g[j][1].variance, g[j][2].variance) < 
                     weight_over_sigma(w[j+1], g[j+1][0].variance, g[j+1][1].variance, g[j+1][2].variance)) {
-                    int tmp_i = sorted_index[j];
-                    sorted_index[j] = sorted_index[j+1];
-                    sorted_index[j+1] = tmp_i;
-                    float tmp_f = w[j];
-                    w[j] = w[j+1];
-                    w[j+1] = tmp_f;
-                    struct gaussian tmp_g = g[j][0];
-                    g[j][0] = g[j+1][0];
-                    g[j+1][0] = tmp_g;
-                    tmp_g = g[j][1];
-                    g[j][1] = g[j+1][1];
-                    g[j+1][1] = tmp_g;
-                    tmp_g = g[j][2];
-                    g[j][2] = g[j+1][2];
-                    g[j+1][2] = tmp_g;
-
+		swap(sorted_index[j], sorted_index[j+1]);
+		swap(w[j], w[j+1]);
+		swap(g[j][0], g[j+1][0]);
+		swap(g[j][1], g[j+1][1]);
+		swap(g[j][2], g[j+1][2]);
             }
         }
     }

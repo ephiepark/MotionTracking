@@ -6,3 +6,7 @@ videoread
 *.txt~
 
 *.m~
+
+*.o
+
+src/motiontracking

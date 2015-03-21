@@ -7,7 +7,6 @@
 
 using namespace std;
 using namespace cv;
-
 const int height = 1280, width = 720;
 
 struct gaussian g[height][width][K][3];

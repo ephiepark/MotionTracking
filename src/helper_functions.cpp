@@ -1,3 +1,4 @@
+#include <cstdio>
 #include <cmath>
 #include "helper_functions.h"
 
@@ -5,7 +6,7 @@ using std::swap;
 
 // when given a gaussian distribution g, a current pixel x_t, returns the Z-score 
 float getZ(int x_t, const gaussian &g) {
-    return (x_t - g.mean) / sqrt(g.variance);
+    return (x_t - g.mean) * (x_t - g.mean) / g.variance;
 }
 
 // w is current weight
@@ -54,13 +55,13 @@ int is_background(int selected_gaussian, float w[K], struct gaussian g[K][3]) {
     }
     
     // accumulated_weight[i] = sum ( sorted_weight[0] + ...sorted_weight[i]);
-    int accumulated_weight[K];
+    float accumulated_weight[K];
     accumulated_weight[0] = w[0];
     if (selected_gaussian == sorted_index[0]) return 1;
     for (int i=1; i<K; i++) {
         accumulated_weight[i] = accumulated_weight[i-1] + w[i];
         if (accumulated_weight[i-1] < BACKGROUND_THRESH) {
-            if (selected_gaussian == sorted_index[i]) return 1;
+	    if (selected_gaussian == sorted_index[i]) return 1;
         }
     }
     return 0;

@@ -18,12 +18,67 @@ float update_weight(float w, float l_a, int m) {
 // Only the distribution which matches the new observation would call this function to update its parameters 
 void update_distribution(int x_t, gaussian &g) {
     g.mean = (1.0 - RHO) * g.mean + RHO * x_t;
-    g.variance = (1.0 - RHO) * g.variance + RHO * (x_t - g.mean) ^ T * (x_t - g.mean);
+    // matlab code uses same variance for 3 colors... 
+    g.variance = (1.0 - RHO) * g.variance + RHO * (x_t - g.mean) ^ 2;
 }
 
 // TODO B = argmin_b(sum(1, b) w > T)
 int num_background(float t, float *weights) {
     return 1;
+}
+
+inline float weight_over_sigma(float weight, float v1, float v2, float v3) {
+    return w / (v1*v2*v3)^(1/6);
+}
+
+int is_background(int selected_gaussian, float w[K], struct gaussian g[K][3]) {
+    // sort by weight / sqrt(variance) 
+    int sorted_index[K];
+    for (int i=0; i<K; i++) {
+        sorted_index[i] = i;
+    }
+    // bubble sort...
+    for (int i=0; i<K; i++) {
+        for (int j=0; j<K-1; j++) {
+            if (weight_over_sigma(w[j], g[j][0].variance, g[j][1].variance, g[j][2].variance) < 
+                    weight_over_sigma(w[j+1], g[j+1][0].variance, g[j+1][1].variance, g[j+1][2].variance)) {
+                    int tmp_i = sorted_index[j];
+                    sorted_index[j] = sorted_index[j+1];
+                    sorted_index[j+1] = tmp_i;
+                    float tmp_f = w[j];
+                    w[j] = w[j+1];
+                    w[j+1] = tmp_f;
+                    struct gaussian tmp_g = g[j][0];
+                    g[j][0] = g[j+1][0];
+                    g[j+1][0] = tmp_g;
+                    tmp_g = g[j][1];
+                    g[j][1] = g[j+1][1];
+                    g[j+1][1] = tmp_g;
+                    tmp_g = g[j][2];
+                    g[j][2] = g[j+1][2];
+                    g[j+1][2] = tmp_g;
+
+            }
+        }
+    }
+    
+    // accumulated_weight[i] = sum ( sorted_weight[0] + ...sorted_weight[i]);
+    int accumulated_weight[K];
+    accumulated_weight[0] = w[0];
+    if (selected_gaussian == sorted_index[0]) return 1;
+    for (int i=1; i<K; i++) {
+        accumulated_weight[i] = accumulated_weight[i-1] + w[i];
+        if (accumulated_weight[i-1] < BACKGROUND_THRESH) {
+            if (selected_gaussian == sorted_index[i]) return 1;
+        }
+    }
+    return 0;
+    // background[i] = 1 if accumulated_weight[i] < BACKGROUND_THRESH;
+    // background[0] = 1; always
+    // if selected_gaussian is background 
+    //  return true
+    // if not
+    //  return false // foreground
 }
 
 /*

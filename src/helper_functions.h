@@ -7,7 +7,7 @@ const float L_A = 0.02;
 const float DEVIATION_SQ_THRESH = 49;
 const float INIT_VARIANCE = 3;
 const float INIT_MIXPROP = 0.00001;
-const float BACKGROUND_THRESH = 0.0;
+const float BACKGROUND_THRESH = 0.9;
 const float COMPONENT_THRESH = 10;
 
 struct gaussian {

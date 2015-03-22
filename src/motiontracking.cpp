@@ -12,6 +12,7 @@ const int height = 1280, width = 720;
 
 struct gaussian g[height][width][K][3];
 float w[height][width][K];
+char foreground[height][width];
 
 int main(int, char**)
 {
@@ -27,8 +28,8 @@ int main(int, char**)
     char name[1000];
 
     vector<Mat> frames;
-//    int width = (int) cap.get(CV_CAP_PROP_FRAME_WIDTH);
-//    int height = (int) cap.get(CV_CAP_PROP_FRAME_HEIGHT);
+    //    int width = (int) cap.get(CV_CAP_PROP_FRAME_WIDTH);
+    //    int height = (int) cap.get(CV_CAP_PROP_FRAME_HEIGHT);
 
     Mat frame0;
     cap >> frame0;
@@ -54,7 +55,7 @@ int main(int, char**)
     puts("Inited Gaussian");
 
     Mat frame;
-    
+
     int frameIndex = 0;
     char filename[102];
 
@@ -115,33 +116,35 @@ int main(int, char**)
                 for (int k=0; k<K; k++) {
                     w[i][j][k] = w[i][j][k] / sum;
                 }
-                
+
                 if (is_background(min_ind, w[i][j], g[i][j])){
                     // background
-                    frame.at<cv::Vec3b>(j, i)[0] = 0;
-                    frame.at<cv::Vec3b>(j, i)[1] = 0;
-                    frame.at<cv::Vec3b>(j, i)[2] = 0;
+                    //frame.at<cv::Vec3b>(j, i)[0] = 0;
+                    //frame.at<cv::Vec3b>(j, i)[1] = 0;
+                    //frame.at<cv::Vec3b>(j, i)[2] = 0;
+                    foreground[i][j] = 0;
                 }else{
                     // foreground
                     // change to black dot
+                    foreground[i][j] = 1;         
                     //frame.at<cv::Vec3b>(j, i)[0] = 0;
                     //frame.at<cv::Vec3b>(j, i)[1] = 0;
                     //frame.at<cv::Vec3b>(j, i)[2] = 0;
                 }
             }
         }
-	//printf("to show frame\n");
-	//imshow("frame", frame);
+        //printf("to show frame\n");
+        //imshow("frame", frame);
+        
+        sprintf(filename, "im%d.png", frameIndex++);
 
-	sprintf(filename, "im%d.png", frameIndex++);
-
-	try {
-	    imwrite(filename, frame, compression_params);
-	}
-	catch (runtime_error& ex) {
-	    fprintf(stderr, "Exception converting image to PNG format: %s\n", ex.what());
-	    return 1;
-	}
+        try {
+            imwrite(filename, frame, compression_params);
+        }
+        catch (runtime_error& ex) {
+            fprintf(stderr, "Exception converting image to PNG format: %s\n", ex.what());
+            return 1;
+        }
     }
     printf("Done\n");
     return 0;

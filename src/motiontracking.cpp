@@ -125,7 +125,31 @@ int main(int, char**)
                 }else{
                     // foreground
                     // change to black dot
-                    foreground[i][j] = 1;         
+                    foreground[i][j] = -1;         
+                }
+            }
+        }
+        int num_obj = 0;
+        int size_obj[256];
+        for (int i=0; i<height; i++) {
+            for (int j=0; j<width; j++) {
+                if (foreground[i][j] == -1) {
+                    num_obj++;
+                    foreground[i][j] = num_obj;
+                    size_obj[num_obj-1] = connected_component(i, j, foreground);
+                }
+            }
+        }
+        for (int k=0; k<num_obj; k++) {
+            if (size_obj[k] >= size_threshold) {
+                for (int i=0; i<height; i++) {
+                    for (int j=0; j<width; j++) {
+                        if (foreground[i][j] == k+1) {
+                            frame.at<cv::Vec3b>(i, j)[0] = 255;
+                            frame.at<cv::Vec3b>(i, j)[1] = 255
+                            frame.at<cv::Vec3b>(i, j)[2] = 255;
+                        }
+                    }
                 }
             }
         }

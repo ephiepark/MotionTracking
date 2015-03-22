@@ -7,7 +7,7 @@
 
 using namespace std;
 using namespace cv;
-const int height = 1280, width = 720;
+const int width = 320, height = 180;
 
 struct gaussian g[height][width][K][3];
 float w[height][width][K];
@@ -26,8 +26,8 @@ int main(int, char**)
     char name[1000];
 
     vector<Mat> frames;
-//    int width = (int) cap.get(CV_CAP_PROP_FRAME_WIDTH);
-//    int height = (int) cap.get(CV_CAP_PROP_FRAME_HEIGHT);
+    cap.set(CV_CAP_PROP_FRAME_WIDTH, width);
+    cap.set(CV_CAP_PROP_FRAME_HEIGHT, height);
 
     Mat frame0;
     cap >> frame0;
@@ -43,9 +43,9 @@ int main(int, char**)
                 g[i][j][k][2].variance = INIT_VARIANCE;
                 w[i][j][k] = 0;
             }
-            g[i][j][0][0].mean = frame0.at<cv::Vec3b>(j, i)[0];
-            g[i][j][0][1].mean = frame0.at<cv::Vec3b>(j, i)[1];
-            g[i][j][0][2].mean = frame0.at<cv::Vec3b>(j, i)[2];    
+            g[i][j][0][0].mean = frame0.at<cv::Vec3b>(i, j)[0];
+            g[i][j][0][1].mean = frame0.at<cv::Vec3b>(i, j)[1];
+            g[i][j][0][2].mean = frame0.at<cv::Vec3b>(i, j)[2];    
             w[i][j][0] = 1;
         }
     }
@@ -62,9 +62,9 @@ int main(int, char**)
         cap >> frame; // get a new frame from camera
         for (int i=0; i<height; i++) {
             for (int j=0; j<width; j++) {
-                int p_r = frame.at<cv::Vec3b>(j, i)[0];
-                int p_g = frame.at<cv::Vec3b>(j, i)[1];
-                int p_b = frame.at<cv::Vec3b>(j, i)[2];
+                int p_r = frame.at<cv::Vec3b>(i, j)[0];
+                int p_g = frame.at<cv::Vec3b>(i, j)[1];
+                int p_b = frame.at<cv::Vec3b>(i, j)[2];
                 float min = -1;
                 int min_ind = -1;
                 for (int k=0; k<K; k++) {
@@ -117,9 +117,9 @@ int main(int, char**)
                 
                 if (is_background(min_ind, w[i][j], g[i][j])){
                     // background
-                    frame.at<cv::Vec3b>(j, i)[0] = 0;
-                    frame.at<cv::Vec3b>(j, i)[1] = 0;
-                    frame.at<cv::Vec3b>(j, i)[2] = 0;
+                    frame.at<cv::Vec3b>(i, j)[0] = 0;
+                    frame.at<cv::Vec3b>(i, j)[1] = 0;
+                    frame.at<cv::Vec3b>(i, j)[2] = 0;
                 }else{
                     // foreground
                     // change to black dot
@@ -129,18 +129,19 @@ int main(int, char**)
                 }
             }
         }
-	//printf("to show frame\n");
-	//imshow("frame", frame);
+	imshow("frame", frame);
+	waitKey(1);
 
-	sprintf(filename, "im%d.png", frameIndex++);
-
-	try {
-	    imwrite(filename, frame, compression_params);
-	}
-	catch (runtime_error& ex) {
-	    fprintf(stderr, "Exception converting image to PNG format: %s\n", ex.what());
-	    return 1;
-	}
+	/*
+	   sprintf(filename, "im%d.png", frameIndex++);
+	   try {
+	   imwrite(filename, frame, compression_params);
+	   }
+	   catch (runtime_error& ex) {
+	   fprintf(stderr, "Exception converting image to PNG format: %s\n", ex.what());
+	   return 1;
+	   }
+	 */
     }
     printf("Done\n");
     return 0;

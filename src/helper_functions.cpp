@@ -73,8 +73,10 @@ int is_background(int selected_gaussian, float w[K], struct gaussian g[K][3]) {
     //  return false // foreground
 }
 
-int connected_component(int y, int x, char foreground[height][width]) {
+int connected_component(int y, int x, char foreground[height][width], int &y_sum, int &x_sum) {
     int counter = 1;
+    y_sum += y;
+    x_sum += x;
     for (int i=-1; i<=1; i++) {
         for (int j=-1; j<=1; j++) {
             if (i == 0 && j == 0) continue;

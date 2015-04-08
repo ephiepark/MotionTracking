@@ -7,11 +7,10 @@
 
 using namespace std;
 using namespace cv;
-const int width = 320, height = 180;
 
 struct gaussian g[height][width][K][3];
 float w[height][width][K];
-char foreground[height][width];
+int foreground[height][width];
 
 int main(int, char**)
 {
@@ -22,9 +21,6 @@ int main(int, char**)
     vector<int> compression_params;
     compression_params.push_back(CV_IMWRITE_PNG_COMPRESSION);
     compression_params.push_back(9);
-
-    int index = 0;
-    char name[1000];
 
     vector<Mat> frames;
     cap.set(CV_CAP_PROP_FRAME_WIDTH, width);
@@ -51,12 +47,7 @@ int main(int, char**)
         }
     }
 
-    puts("Inited Gaussian");
-
     Mat frame;
-
-    int frameIndex = 0;
-    char filename[102];
 
     for(;;)
     {
@@ -129,10 +120,11 @@ int main(int, char**)
                 }
             }
         }
+	
         int num_obj = 0;
-        int size_obj[256];
-        int x_obj[256];
-        int y_obj[256];
+        int size_obj[width*height];
+        int x_obj[width*height];
+        int y_obj[width*height];
         for (int i=0; i<height; i++) {
             for (int j=0; j<width; j++) {
                 if (foreground[i][j] == -1) {
@@ -140,21 +132,23 @@ int main(int, char**)
                     foreground[i][j] = num_obj;
                     y_obj[num_obj-1] = 0;
                     x_obj[num_obj-1] = 0;
-                    size_obj[num_obj-1] = connected_component(i, j, foreground, 
-                            y_obj[num_obj-1], x_obj[num_obj-1]);
+                    size_obj[num_obj-1] = connected_component(i, j, foreground); 
+                     //       y_obj+num_obj-1, x_obj+num_obj-1);
                     y_obj[num_obj-1] = y_obj[num_obj-1] / size_obj[num_obj-1];
                     x_obj[num_obj-1] = y_obj[num_obj-1] / size_obj[num_obj-1];
                 }
             }
         }
+
         for (int k=0; k<num_obj; k++) {
-            if (size_obj[k] >= size_threshold) {
+            if (size_obj[k] >= COMPONENT_THRESH) {
                 for (int i=0; i<height; i++) {
                     for (int j=0; j<width; j++) {
                         if (foreground[i][j] == k+1) {
-                            frame.at<cv::Vec3b>(i, j)[0] = 255;
-                            frame.at<cv::Vec3b>(i, j)[1] = 255
-                            frame.at<cv::Vec3b>(i, j)[2] = 255;
+			    int color = 256*256*256/num_obj*(k+1);
+                            frame.at<cv::Vec3b>(i, j)[0] = color/(256*256);
+                            frame.at<cv::Vec3b>(i, j)[1] = color/256%256;
+                            frame.at<cv::Vec3b>(i, j)[2] = color%256;
                         }
                     }
                 }

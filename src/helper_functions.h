@@ -8,7 +8,8 @@ const float DEVIATION_SQ_THRESH = 49;
 const float INIT_VARIANCE = 3;
 const float INIT_MIXPROP = 0.00001;
 const float BACKGROUND_THRESH = 0.9;
-const float COMPONENT_THRESH = 10;
+const float COMPONENT_THRESH = 30;
+const int width = 320, height = 180;
 
 struct gaussian {
     float mean;
@@ -21,5 +22,6 @@ void update_distribution(int x_t, gaussian &g);
 float gaussian_prob_density_function(int x_t, float mean, float variance);
 int num_background(float t, float *weights);
 int is_background(int selected_gaussian, float w[K], struct gaussian g[K][3]);
+int connected_component(int y, int x, int foreground[height][width]/*, int *y_sum, int *x_sum*/);
 #endif
 

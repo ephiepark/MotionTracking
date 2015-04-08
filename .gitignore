@@ -10,3 +10,7 @@ videoread
 *.o
 
 src/motiontracking
+
+*.plist
+
+src/motiontracking.dSYM/Contents/Resources/DWARF/motiontracking

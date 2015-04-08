@@ -132,8 +132,8 @@ int main(int, char**)
                     foreground[i][j] = num_obj;
                     y_obj[num_obj-1] = 0;
                     x_obj[num_obj-1] = 0;
-                    size_obj[num_obj-1] = connected_component(i, j, foreground); 
-                     //       y_obj+num_obj-1, x_obj+num_obj-1);
+                    size_obj[num_obj-1] = connected_component(i, j, foreground, 
+                            y_obj[num_obj-1], x_obj[num_obj-1]);
                     y_obj[num_obj-1] = y_obj[num_obj-1] / size_obj[num_obj-1];
                     x_obj[num_obj-1] = y_obj[num_obj-1] / size_obj[num_obj-1];
                 }

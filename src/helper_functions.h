@@ -22,6 +22,6 @@ void update_distribution(int x_t, gaussian &g);
 float gaussian_prob_density_function(int x_t, float mean, float variance);
 int num_background(float t, float *weights);
 int is_background(int selected_gaussian, float w[K], struct gaussian g[K][3]);
-int connected_component(int y, int x, int foreground[height][width]/*, int *y_sum, int *x_sum*/);
+int connected_component(int y, int x, int foreground[height][width], int &y_sum, int &x_sum);
 #endif
 

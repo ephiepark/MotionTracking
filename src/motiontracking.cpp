@@ -12,6 +12,10 @@ struct gaussian g[height][width][K][3];
 float w[height][width][K];
 int foreground[height][width];
 
+KalmanFilter kf_obj[heighti*width];
+int size_obj[heighti*width];
+int num_obj = 0;
+
 int main(int, char**)
 {
     VideoCapture cap(0); // open the default camera
@@ -121,31 +125,49 @@ int main(int, char**)
             }
         }
 	
-        int num_obj = 0;
-        int size_obj[width*height];
+        int num_obj_f = 0;
+        int size_obj_f[width*height];
         int x_obj[width*height];
         int y_obj[width*height];
         for (int i=0; i<height; i++) {
             for (int j=0; j<width; j++) {
                 if (foreground[i][j] == -1) {
-                    num_obj++;
-                    foreground[i][j] = num_obj;
-                    y_obj[num_obj-1] = 0;
-                    x_obj[num_obj-1] = 0;
-                    size_obj[num_obj-1] = connected_component(i, j, foreground, 
-                            y_obj[num_obj-1], x_obj[num_obj-1]);
-                    y_obj[num_obj-1] = y_obj[num_obj-1] / size_obj[num_obj-1];
-                    x_obj[num_obj-1] = y_obj[num_obj-1] / size_obj[num_obj-1];
+                    num_obj_f++;
+                    foreground[i][j] = num_obj_f;
+                    y_obj[num_obj_f-1] = 0;
+                    x_obj[num_obj_f-1] = 0;
+                    size_obj_f[num_obj_f-1] = connected_component(i, j, foreground, 
+                            y_obj[num_obj_f-1], x_obj[num_obj_f-1]);
+                    y_obj[num_obj_f-1] = y_obj[num_obj_f-1] / size_obj_f[num_obj_f-1];
+                    x_obj[num_obj_f-1] = y_obj[num_obj_f-1] / size_obj_f[num_obj_f-1];
                 }
             }
         }
 
-        for (int k=0; k<num_obj; k++) {
-            if (size_obj[k] >= COMPONENT_THRESH) {
+        for (int k=0; k<num_obj_f; k++) {
+            if (size_obj_f[k] >= COMPONENT_THRESH) {
+                float min = DISTANCE_THRESH;
+                int min_i = -1;
+                for (int i=0; i<num_obj; i++) {
+                    int kf_p_x;
+                    int kf_p_y;
+                    kalman_predict(kf_obj[i], kf_p_y, kf_p_x);
+                    if (distance(x_obj[k] - kf_p_x, y_obj[k] - kf_p_y) < min) {
+                        min = distance(x_obj[k] - kf_p_x, y_obj[k] - kf_p_y);
+                        min_i = i;
+                    }
+                }
+                if (min_i == -1) {
+                    kf_obj[num_obj++] = kalman_init(y_obj[k], x_obj[k]);
+                    min_i = num_obj-1;
+                }else{
+                    kalman_update(kf_obj[min_i], y_obj[k], x_obj[k]);
+                }
+                
                 for (int i=0; i<height; i++) {
                     for (int j=0; j<width; j++) {
                         if (foreground[i][j] == k+1) {
-			    int color = 256*256*256/num_obj*(k+1);
+			                int color = 256*256*256/num_obj_f*(min_i);
                             frame.at<cv::Vec3b>(i, j)[0] = color/(256*256);
                             frame.at<cv::Vec3b>(i, j)[1] = color/256%256;
                             frame.at<cv::Vec3b>(i, j)[2] = color%256;

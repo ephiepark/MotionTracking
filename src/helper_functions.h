@@ -4,7 +4,14 @@
 #include <cstdio>
 #include <cmath>
 
+#include "opencv2/video/tracking.hpp"
+#include "opencv2/highgui/highgui.hpp"
+
 using std::swap;
+using cv::KalmanFilter;
+using cv::Mat_;
+using cv::Mat;
+using cv::Scalar;
 
 const int K = 3;
 const float RHO = 0.01;
@@ -105,6 +112,36 @@ int connected_component(int y, int x, int foreground[height][width], int &y_sum,
         }
     }
     return counter;
+}
+
+KalmanFilter kalman_init(int y, int x) {
+    KalmanFilter KF(4, 2, 0);
+    KF.transitionMatrix = *(Mat_<int>(4, 4) << 1,0,1,0,   0,1,0,1,  0,0,1,0,  0,0,0,1);
+    KF.statePre.at<int>(0) = x;
+    KF.statePre.at<int>(1) = y;
+    KF.statePre.at<int>(2) = 0;
+    KF.statePre.at<int>(3) = 0;
+
+    setIdentity(KF.measurementMatrix);
+    setIdentity(KF.processNoiseCov, Scalar::all(1e-4));
+    setIdentity(KF.measurementNoiseCov, Scalar::all(10));
+    setIdentity(KF.errorCovPost, Scalar::all(.1));
+
+    return KF;
+}
+
+void kalman_predict(KalmanFilter &KF, int &y, int &x) {
+    Mat prediction = KF.predict();
+    x = prediction.at<int>(0);
+    y = prediction.at<int>(1);
+}
+
+void kalman_update(KalmanFilter &KF, int y, int x) {
+    Mat_<int> actual(2,1);
+    actual.setTo(Scalar(0));
+    actual(0) = x;
+    actual(1) = y;
+    KF.correct(actual); //returns an estimation
 }
 
 /*

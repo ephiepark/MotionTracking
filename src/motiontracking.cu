@@ -17,6 +17,7 @@ int foreground[height][width];
 int size_obj_f[width*height];
 int x_obj[width*height];
 int y_obj[width*height];
+int h_i[height][width][3];
 
 KalmanFilter kf_obj[height*width];
 int size_obj[height*width];
@@ -120,6 +121,7 @@ __global__ void foreground_g(int *d_imageArray, struct gaussian *d_g, float *d_w
 
 int main(int, char**)
 {
+    cout << "main started" << endl;
     VideoCapture cap(0); // open the default camera
     if(!cap.isOpened())  // check if we succeeded
 	return -1;
@@ -200,7 +202,6 @@ int main(int, char**)
 	cap >> frame; // get a new frame from camera
 
 	// data copy of image 
-	int h_i[height][width][3];
 	for (int i=0; i<height; i++) {
 	    for (int j=0; j<width; j++) {
 		h_i[i][j][0] = frame.at<cv::Vec3b>(i, j)[0];

@@ -16,12 +16,16 @@ using cv::Scalar;
 const int K = 3;
 const float RHO = 0.01;
 const float L_A = 0.02;
-const float DEVIATION_SQ_THRESH = 49;
+const float DEVIATION_SQ_THRESH =  49;
 const float INIT_VARIANCE = 3;
 const float INIT_MIXPROP = 0.00001;
 const float BACKGROUND_THRESH = 0.9;
-const float COMPONENT_THRESH = 30;
-const int width = 320, height = 180;
+const float COMPONENT_THRESH = 100;
+const int DISTANCE_THRESH = 10000;
+const int SIZE_THRESH = 1000000;
+const int width = 1080, height = 720;
+
+int qx[width*height], qy[width*height];
 
 struct gaussian {
         float mean;
@@ -29,7 +33,7 @@ struct gaussian {
 };
 
 // when given a gaussian distribution g, a current pixel x_t, returns the Z-score 
-float getZ(int x_t, const gaussian &g) {
+__device__ float getZ(int x_t, const gaussian &g) {
     return (x_t - g.mean) * (x_t - g.mean) / g.variance;
 }
 
@@ -37,13 +41,13 @@ float getZ(int x_t, const gaussian &g) {
 // l_a is alpha value for learning rate
 // m is 1 for the model which matched the current pixel and 0 for the remaining models
 // TODO after this approximation, the weights are renormalized.
-float update_weight(float w, float l_a, int m) {
+__device__ float update_weight(float w, float l_a, int m) {
     return (1 - l_a) * w + l_a * m;
 }
 
 // The mean and variance parameters for unmatched distributions remain the same
 // Only the distribution which matches the new observation would call this function to update its parameters 
-void update_distribution(int x_t, gaussian &g) {
+__device__ void update_distribution(int x_t, gaussian &g) {
     g.mean = (1.0 - RHO) * g.mean + RHO * x_t;
     // matlab code uses same variance for 3 colors... 
     g.variance = (1.0 - RHO) * g.variance + RHO * (x_t - g.mean) * (x_t - g.mean);
@@ -54,11 +58,29 @@ int num_background(float t, float *weights) {
     return 1;
 }
 
-inline float weight_over_sigma(float weight, float v1, float v2, float v3) {
-    return weight / pow(v1*v2*v3, 1.0/6.0);
+__device__ inline float weight_over_sigma(float weight, float v1, float v2, float v3) {
+    return weight / pow(v1*v2*v3, (float)(1.0/6.0));
 }
 
-int is_background(int selected_gaussian, float w[K], struct gaussian g[K][3]) {
+__device__ void d_swap(int &a, int &b) {
+    int c = a;
+    a = b;
+    b = c;
+}
+
+__device__ void d_swap(float &a, float &b) {
+    float c = a;
+    a = b;
+    b = c;
+}
+
+__device__ void d_swap(struct gaussian &a, struct gaussian &b) {
+    struct gaussian c = a;
+    a = b;
+    b = c;
+}
+
+__device__ int is_background(int selected_gaussian, float w[K], struct gaussian *g) {
     // sort by weight / sqrt(variance) 
     int sorted_index[K];
     for (int i=0; i<K; i++) {
@@ -67,13 +89,13 @@ int is_background(int selected_gaussian, float w[K], struct gaussian g[K][3]) {
     // bubble sort...
     for (int i=0; i<K; i++) {
         for (int j=0; j<K-1; j++) {
-            if (weight_over_sigma(w[j], g[j][0].variance, g[j][1].variance, g[j][2].variance) < 
-                    weight_over_sigma(w[j+1], g[j+1][0].variance, g[j+1][1].variance, g[j+1][2].variance)) {
-		swap(sorted_index[j], sorted_index[j+1]);
-		swap(w[j], w[j+1]);
-		swap(g[j][0], g[j+1][0]);
-		swap(g[j][1], g[j+1][1]);
-		swap(g[j][2], g[j+1][2]);
+            if (weight_over_sigma(w[j], g[j*3+0].variance, g[j*3+1].variance, g[j*3+2].variance) < 
+                    weight_over_sigma(w[j+1], g[(j+1)*3+0].variance, g[(j+1)*3+1].variance, g[(j+1)*3+2].variance)) {
+		d_swap(sorted_index[j], sorted_index[j+1]);
+		d_swap(w[j], w[j+1]);
+		d_swap(g[j*3+0], g[(j+1)*3+0]);
+		d_swap(g[j*3+1], g[(j+1)*3+1]);
+		d_swap(g[j*3+2], g[(j+1)*3+2]);
             }
         }
     }
@@ -97,30 +119,46 @@ int is_background(int selected_gaussian, float w[K], struct gaussian g[K][3]) {
     //  return false // foreground
 }
 
-int connected_component(int y, int x, int foreground[height][width], int &y_sum, int &x_sum) {
+int connected_component(int sy, int sx, int foreground[height][width], int &y_sum, int &x_sum) {
     int counter = 1;
-    y_sum += y;
-    x_sum += x;
-    for (int i=-1; i<=1; i++) {
-        for (int j=-1; j<=1; j++) {
-            if (i == 0 && j == 0) continue;
-            if (y + i >= 0 && y + i < height && x + j >= 0 && x + j < width && 
-                    foreground[y+i][x+j] == -1) {
-                foreground[y+i][x+j] = foreground[y][x];
-                counter += connected_component(y+i, x+j, foreground, y_sum, x_sum);
-            }
-        }
+    y_sum += sy;
+    x_sum += sx;
+
+    int tail = 1;
+    qx[0] = sx;
+    qy[0] = sy;
+
+    for(int head = 0; head < tail; ++head) {
+	int x = qx[head], y = qy[head];
+
+	for (int i=-3; i<=3; i++) {
+	    for (int j=-3; j<=3; j++) {
+		if (i == 0 && j == 0) continue;
+		if (y + i >= 0 && y + i < height && x + j >= 0 && x + j < width && 
+			foreground[y+i][x+j] == -1) {
+		    foreground[y+i][x+j] = foreground[y][x];
+		    ++counter;
+
+		    y_sum += y+i;
+		    x_sum += x+j;
+
+		    qy[tail] = y+i;
+		    qx[tail] = x+j;
+		    ++tail;
+		}
+	    }
+	}
     }
     return counter;
 }
 
 KalmanFilter kalman_init(int y, int x) {
     KalmanFilter KF(4, 2, 0);
-    KF.transitionMatrix = *(Mat_<int>(4, 4) << 1,0,1,0,   0,1,0,1,  0,0,1,0,  0,0,0,1);
-    KF.statePre.at<int>(0) = x;
-    KF.statePre.at<int>(1) = y;
-    KF.statePre.at<int>(2) = 0;
-    KF.statePre.at<int>(3) = 0;
+    KF.transitionMatrix = *(Mat_<float>(4, 4) << 1,0,1,0,   0,1,0,1,  0,0,1,0,  0,0,0,1);
+    KF.statePre.at<float>(0) = (float)x;
+    KF.statePre.at<float>(1) = (float)y;
+    KF.statePre.at<float>(2) = 0;
+    KF.statePre.at<float>(3) = 0;
 
     setIdentity(KF.measurementMatrix);
     setIdentity(KF.processNoiseCov, Scalar::all(1e-4));
@@ -132,16 +170,20 @@ KalmanFilter kalman_init(int y, int x) {
 
 void kalman_predict(KalmanFilter &KF, int &y, int &x) {
     Mat prediction = KF.predict();
-    x = prediction.at<int>(0);
-    y = prediction.at<int>(1);
+    x = (int)(prediction.at<float>(0));
+    y = (int)(prediction.at<float>(1));
 }
 
 void kalman_update(KalmanFilter &KF, int y, int x) {
-    Mat_<int> actual(2,1);
+    Mat_<float> actual(2,1);
     actual.setTo(Scalar(0));
     actual(0) = x;
     actual(1) = y;
     KF.correct(actual); //returns an estimation
+}
+
+int get_distance(int a, int b) {
+    return a*a + b*b;
 }
 
 /*

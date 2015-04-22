@@ -24,7 +24,6 @@ int size_obj[height*width];
 int num_obj = 0;
 
 
-
 /**
  * This macro checks return value of the CUDA runtime call and exits
  * the application if the call failed.
@@ -47,11 +46,11 @@ __global__ void foreground_g(int *d_imageArray, struct gaussian *d_g, float *d_w
 
     if(!(i < h && j < w)) return; //do nothing if indices are invalid
 
-    unsigned int idx = ((i * w) + j) * 3;
+    unsigned int idx = ((i * w) + j);
 
-    int p_r = d_imageArray[idx]; // frame.at<cv::Vec3b>(i, j)[0];
-    int p_g = d_imageArray[idx+1]; // frame.at<cv::Vec3b>(i, j)[1];
-    int p_b = d_imageArray[idx+2]; // frame.at<cv::Vec3b>(i, j)[2];
+    int p_r = d_imageArray[idx * 3]; // frame.at<cv::Vec3b>(i, j)[0];
+    int p_g = d_imageArray[idx * 3 + 1]; // frame.at<cv::Vec3b>(i, j)[1];
+    int p_b = d_imageArray[idx * 3 + 2]; // frame.at<cv::Vec3b>(i, j)[2];
     float min = -1;
     int min_ind = -1;
     for (int k=0; k<K; k++) {
@@ -70,9 +69,9 @@ __global__ void foreground_g(int *d_imageArray, struct gaussian *d_g, float *d_w
     for (int k=0; k<K; k++) {
 	if (k == min_ind) {
 	    d_w[idx * K + k] /* w[i][j][k] */ = update_weight( d_w[idx * K + k] /* w[i][j][k] */, L_A, 1);
-	    update_distribution(p_r, d_g[idx * K * 3 + k * 3] /* g[i][j][k][0] */);
-	    update_distribution(p_g, d_g[idx * K * 3 + k * 3 + 1] /* g[i][j][k][1] */);
-	    update_distribution(p_b, d_g[idx * K * 3 + k * 3 + 2] /* g[i][j][k][2] */);
+	    update_distribution(p_r, &d_g[idx * K * 3 + k * 3] /* g[i][j][k][0] */);
+	    update_distribution(p_g, &d_g[idx * K * 3 + k * 3 + 1] /* g[i][j][k][1] */);
+	    update_distribution(p_b, &d_g[idx * K * 3 + k * 3 + 2] /* g[i][j][k][2] */);
 	}else{
 	    d_w[idx * K + k] /* w[i][j][k] */ = update_weight(d_w[idx * K + k] /* w[i][j][k] */, L_A, 0);
 	}
@@ -181,21 +180,21 @@ int main(int, char**)
 
     // data copy of gaussian 
     struct gaussian *d_g;
-    cudaMalloc((void **) &d_g, sizeof(struct gaussian) * 3 * width * height * K);
-    cudaMemcpy(d_g, g, sizeof(struct gaussian) * 3 * width * height * K, cudaMemcpyHostToDevice);
+    CUDA_CHECK_RETURN(cudaMalloc((void **) &d_g, sizeof(struct gaussian) * 3 * width * height * K));
+    CUDA_CHECK_RETURN(cudaMemcpy(d_g, g, sizeof(struct gaussian) * 3 * width * height * K, cudaMemcpyHostToDevice));
 
     // data copy of weight
     float *d_w;
-    cudaMalloc((void **) &d_w, sizeof(float) * K * width * height);
-    cudaMemcpy(d_w, w, sizeof(float) * K * width * height, cudaMemcpyHostToDevice);
+    CUDA_CHECK_RETURN(cudaMalloc((void **) &d_w, sizeof(float) * K * width * height));
+    CUDA_CHECK_RETURN(cudaMemcpy(d_w, w, sizeof(float) * K * width * height, cudaMemcpyHostToDevice));
 
     // data allocation of foreground
     int *d_f;
-    cudaMalloc((void **) &d_f, sizeof(int) * width * height);
+    CUDA_CHECK_RETURN(cudaMalloc((void **) &d_f, sizeof(int) * width * height));
 
     // data allocation of image
     int *d_frame;
-    cudaMalloc((void **) &d_frame, sizeof(int) * width * height * 3);
+    CUDA_CHECK_RETURN(cudaMalloc((void **) &d_frame, sizeof(int) * width * height * 3));
 
     for(;;)
     {
@@ -209,7 +208,7 @@ int main(int, char**)
 		h_i[i][j][2] = frame.at<cv::Vec3b>(i, j)[2];
 	    }
 	}
-	cudaMemcpy(d_frame, h_i, sizeof(int) * width * height * 3, cudaMemcpyHostToDevice);
+	CUDA_CHECK_RETURN(cudaMemcpy(d_frame, h_i, sizeof(int) * width * height * 3, cudaMemcpyHostToDevice));
 
 	// kernel launch
 	// define grid and block dimensions
@@ -222,7 +221,7 @@ int main(int, char**)
 	CUDA_CHECK_RETURN(cudaGetLastError());
 
 	// data copy back
-	cudaMemcpy(foreground, d_f, sizeof(int) * width * height, cudaMemcpyDeviceToHost);
+	CUDA_CHECK_RETURN(cudaMemcpy(foreground, d_f, sizeof(int) * width * height, cudaMemcpyDeviceToHost));
 
 	int num_obj_f = 0;
 	for (int i=0; i<height; i++) {
@@ -321,7 +320,6 @@ int main(int, char**)
 	   }
 	 */
     }
-    printf("Done\n");
     return 0;
 }
 

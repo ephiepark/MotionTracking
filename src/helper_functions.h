@@ -7,6 +7,8 @@
 #include "opencv2/video/tracking.hpp"
 #include "opencv2/highgui/highgui.hpp"
 
+#define RHO 0.01
+
 using std::swap;
 using cv::KalmanFilter;
 using cv::Mat_;
@@ -14,7 +16,6 @@ using cv::Mat;
 using cv::Scalar;
 
 const int K = 3;
-const float RHO = 0.01;
 const float L_A = 0.02;
 const float DEVIATION_SQ_THRESH =  49;
 const float INIT_VARIANCE = 3;
@@ -47,10 +48,10 @@ __device__ float update_weight(float w, float l_a, int m) {
 
 // The mean and variance parameters for unmatched distributions remain the same
 // Only the distribution which matches the new observation would call this function to update its parameters 
-__device__ void update_distribution(int x_t, gaussian &g) {
-    g.mean = (1.0 - RHO) * g.mean + RHO * x_t;
+__device__ void update_distribution(int x_t, gaussian *gau) {
+    gau->mean = (1.0 - RHO) * gau->mean + RHO * x_t;
     // matlab code uses same variance for 3 colors... 
-    g.variance = (1.0 - RHO) * g.variance + RHO * (x_t - g.mean) * (x_t - g.mean);
+    gau->variance = (1.0 - RHO) * gau->variance + RHO * (x_t - gau->mean) * (x_t - gau->mean);
 }
 
 // TODO B = argmin_b(sum(1, b) w > T)

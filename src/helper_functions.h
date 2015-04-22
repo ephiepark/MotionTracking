@@ -25,8 +25,8 @@ const float DISTANCE_THRESH = 100;
 const int width = 320, height = 180;
 
 struct gaussian {
-        float mean;
-	    float variance;
+    float mean;
+    float variance;
 };
 
 // when given a gaussian distribution g, a current pixel x_t, returns the Z-score 
@@ -117,11 +117,11 @@ int connected_component(int y, int x, int foreground[height][width], int &y_sum,
 
 KalmanFilter kalman_init(int y, int x) {
     KalmanFilter KF(4, 2, 0);
-    KF.transitionMatrix = *(Mat_<int>(4, 4) << 1,0,1,0,   0,1,0,1,  0,0,1,0,  0,0,0,1);
-    KF.statePre.at<int>(0) = x;
-    KF.statePre.at<int>(1) = y;
-    KF.statePre.at<int>(2) = 0;
-    KF.statePre.at<int>(3) = 0;
+    KF.transitionMatrix = *(Mat_<float>(4, 4) << 1,0,1,0,   0,1,0,1,  0,0,1,0,  0,0,0,1);
+    KF.statePre.at<float>(0) = (float)x;
+    KF.statePre.at<float>(1) = (float)y;
+    KF.statePre.at<float>(2) = 0;
+    KF.statePre.at<float>(3) = 0;
 
     setIdentity(KF.measurementMatrix);
     setIdentity(KF.processNoiseCov, Scalar::all(1e-4));
@@ -133,12 +133,12 @@ KalmanFilter kalman_init(int y, int x) {
 
 void kalman_predict(KalmanFilter &KF, int &y, int &x) {
     Mat prediction = KF.predict();
-    x = prediction.at<int>(0);
-    y = prediction.at<int>(1);
+    x = prediction.at<float>(0);
+    y = prediction.at<float>(1);
 }
 
 void kalman_update(KalmanFilter &KF, int y, int x) {
-    Mat_<int> actual(2,1);
+    Mat_<float> actual(2,1);
     actual.setTo(Scalar(0));
     actual(0) = x;
     actual(1) = y;

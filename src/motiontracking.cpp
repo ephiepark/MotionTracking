@@ -12,8 +12,8 @@ struct gaussian g[height][width][K][3];
 float w[height][width][K];
 int foreground[height][width];
 
-KalmanFilter kf_obj[heighti*width];
-int size_obj[heighti*width];
+KalmanFilter kf_obj[height*width];
+int size_obj[height*width];
 int num_obj = 0;
 
 int main(int, char**)
@@ -152,8 +152,8 @@ int main(int, char**)
                     int kf_p_x;
                     int kf_p_y;
                     kalman_predict(kf_obj[i], kf_p_y, kf_p_x);
-                    if (distance(x_obj[k] - kf_p_x, y_obj[k] - kf_p_y) < min) {
-                        min = distance(x_obj[k] - kf_p_x, y_obj[k] - kf_p_y);
+                    if (get_distance(x_obj[k] - kf_p_x, y_obj[k] - kf_p_y) < min) {
+                        min = get_distance(x_obj[k] - kf_p_x, y_obj[k] - kf_p_y);
                         min_i = i;
                     }
                 }

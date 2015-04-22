@@ -21,6 +21,7 @@ const float INIT_VARIANCE = 3;
 const float INIT_MIXPROP = 0.00001;
 const float BACKGROUND_THRESH = 0.9;
 const float COMPONENT_THRESH = 30;
+const float DISTANCE_THRESH = 100;
 const int width = 320, height = 180;
 
 struct gaussian {
@@ -142,6 +143,10 @@ void kalman_update(KalmanFilter &KF, int y, int x) {
     actual(0) = x;
     actual(1) = y;
     KF.correct(actual); //returns an estimation
+}
+
+float get_distance(float a, float b) {
+    return a * a + b * b;
 }
 
 /*

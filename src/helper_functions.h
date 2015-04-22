@@ -22,9 +22,9 @@ const float INIT_VARIANCE = 3;
 const float INIT_MIXPROP = 0.00001;
 const float BACKGROUND_THRESH = 0.9;
 const float COMPONENT_THRESH = 100;
-const int DISTANCE_THRESH = 10000;
+const int DISTANCE_THRESH = 100000;
 const int SIZE_THRESH = 1000000;
-const int width = 1080, height = 720;
+const int width = 352, height = 288;
 
 int qx[width*height], qy[width*height];
 

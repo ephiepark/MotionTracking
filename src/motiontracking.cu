@@ -118,10 +118,14 @@ __global__ void foreground_g(int *d_imageArray, struct gaussian *d_g, float *d_w
 }
 
 
-int main(int, char**)
+int main(int argc, char **argv)
 {
-    cout << "main started" << endl;
-    VideoCapture cap(0); // open the default camera
+    VideoCapture cap; // open the default camera
+    if(argc == 1) {
+	cap.open(0);
+    } else {
+	cap.open(argv[1]);
+    }
     if(!cap.isOpened())  // check if we succeeded
 	return -1;
 

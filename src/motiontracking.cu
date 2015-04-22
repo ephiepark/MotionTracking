@@ -41,13 +41,13 @@ pthread_mutex_t mutex;
 //
 // __global__ kernel for Gaussian
 //
-__global__ void foreground_g(int *d_imageArray, struct gaussian *d_g, float *d_w, int *d_f, int w, int h) {
+__global__ void foreground_g(int *d_imageArray, struct gaussian *d_g, float *d_w, int *d_f) {
     unsigned int i = blockIdx.y * blockDim.y + threadIdx.y;
     unsigned int j = blockIdx.x * blockDim.x + threadIdx.x;
 
-    if(!(i < h && j < w)) return; //do nothing if indices are invalid
+    if(!(i < height/2 && j < width)) return; //do nothing if indices are invalid
 
-    unsigned int idx = ((i * w) + j);
+    unsigned int idx = ((i * width) + j);
 
     int p_r = d_imageArray[idx * 3]; // frame.at<cv::Vec3b>(i, j)[0];
     int p_g = d_imageArray[idx * 3 + 1]; // frame.at<cv::Vec3b>(i, j)[1];
@@ -258,25 +258,31 @@ int main(int argc, char **argv)
     Mat frame;
 
     cudaStream_t stream0, stream1;
-
+    CUDA_CHECK_RETURN(cudaStreamCreate( &stream0 ));
+    CUDA_CHECK_RETURN(cudaStreamCreate( &stream1 ));
 
     // data copy of gaussian 
     struct gaussian *d_g;
+    size_t size_g_per_stream = sizeof(struct gaussian) * 3 * width * height * K / 2;
     CUDA_CHECK_RETURN(cudaMalloc((void **) &d_g, sizeof(struct gaussian) * 3 * width * height * K));
     CUDA_CHECK_RETURN(cudaMemcpy(d_g, g, sizeof(struct gaussian) * 3 * width * height * K, cudaMemcpyHostToDevice));
 
     // data copy of weight
     float *d_w;
+    size_t size_w_per_stream = sizeof(float) * K * width * height / 2;
     CUDA_CHECK_RETURN(cudaMalloc((void **) &d_w, sizeof(float) * K * width * height));
     CUDA_CHECK_RETURN(cudaMemcpy(d_w, w, sizeof(float) * K * width * height, cudaMemcpyHostToDevice));
 
     // data allocation of foreground
     int *d_f;
+    size_t size_f_per_stream = sizeof(int) * width * height / 2;
     CUDA_CHECK_RETURN(cudaMalloc((void **) &d_f, sizeof(int) * width * height));
 
     // data allocation of image
-    int *d_frame;
-    CUDA_CHECK_RETURN(cudaMalloc((void **) &d_frame, sizeof(int) * width * height * 3));
+    int *d_frame0, *d_frame1;
+    size_t size_frame_per_stream = size_f_per_stream * 3;
+    CUDA_CHECK_RETURN(cudaMalloc((void **) &d_frame0, size_frame_per_stream));
+    CUDA_CHECK_RETURN(cudaMalloc((void **) &d_frame1, size_frame_per_stream));
 
     pthread thread;
 
@@ -292,25 +298,26 @@ int main(int argc, char **argv)
                 h_i[i][j][2] = frame.at<cv::Vec3b>(i, j)[2];
             }
         }
-        CUDA_CHECK_RETURN(cudaMemcpy(d_frame, h_i, sizeof(int) * width * height * 3, cudaMemcpyHostToDevice));
+        CUDA_CHECK_RETURN(cudaMemcpyAsync(d_frame0, h_i, size_frame_per_stream, cudaMemcpyHostToDevice, stream0));
+        CUDA_CHECK_RETURN(cudaMemcpyAsync(d_frame1, (char*)(h_i) + size_frame_per_stream, size_frame_per_stream, cudaMemcpyHostToDevice, stream1));
 
-        // kernel launch
         // define grid and block dimensions
         dim3 dimBlock(32, 32);
-        dim3 dimGrid(ceil(width/(double)dimBlock.x), ceil(height/(double)dimBlock.y));
+        dim3 dimGrid(ceil(width/(double)dimBlock.x), ceil(height/2/(double)dimBlock.y));
 
         // kernel launch
-        foreground_g<<<dimGrid, dimBlock>>>(d_frame, d_g, d_w, d_f, width, height);
+        foreground_g<<<dimGrid, dimBlock, 0, stream0>>>(d_frame0, d_g, d_w, d_f);
+        foreground_g<<<dimGrid, dimBlock, 0, stream1>>>(d_frame1, (gaussian *)((char*)(d_g) + size_g_per_stream), (float*)((char*)(d_w) + size_w_per_stream), (int*)((char*)(d_f) + size_f_per_stream));
+
+        // async copy data back
+        CUDA_CHECK_RETURN(cudaMemcpyAsync(foreground, d_f, size_f_per_stream, cudaMemcpyDeviceToHost, stream0));
+        CUDA_CHECK_RETURN(cudaMemcpyAsync((char*)(foreground) + size_f_per_stream, (char*)(d_f) + size_f_per_stream, size_f_per_stream, cudaMemcpyDeviceToHost, stream1));
+
         CUDA_CHECK_RETURN(cudaDeviceSynchronize());	// Wait for the GPU launched work to complete
         CUDA_CHECK_RETURN(cudaGetLastError());
-
-        // data copy back
-        CUDA_CHECK_RETURN(cudaMemcpy(foreground, d_f, sizeof(int) * width * height, cudaMemcpyDeviceToHost));
-        
-        // launch cpu thread
+    
         if (pthread_create(&thread, NULL, &run, NULL) != 0) {
-            fprintf(stderr, "pthread_create() failed\n");
-            return 1;
+            fprintf(stderr, "pthread create failed\n");
         }
     }
     return 0;

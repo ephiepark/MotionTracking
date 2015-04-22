@@ -24,7 +24,7 @@ const float BACKGROUND_THRESH = 0.9;
 const float COMPONENT_THRESH = 100;
 const int DISTANCE_THRESH = 10000;
 const int SIZE_THRESH = 1000000;
-const int width = 1080, height = 720;
+const int width = 654, height = 480;
 
 int qx[width*height], qy[width*height];
 

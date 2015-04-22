@@ -118,26 +118,34 @@ __global__ void foreground_g(int *d_imageArray, struct gaussian *d_g, float *d_w
 }
 
 
-int main(int, char**)
+int main(int argc, char **argv)
 {
-    cout << "main started" << endl;
-    VideoCapture cap(0); // open the default camera
-    if(!cap.isOpened())  // check if we succeeded
+    VideoCapture cap;
+
+    if(argc == 1) {
+	cap.open(0);
+    } else {
+	cap.open(argv[1]);
+    }
+
+    if(!cap.isOpened()) {
+	fprintf(stderr, "failed to open video source.\n");
 	return -1;
+    }
 
     vector<int> compression_params;
     compression_params.push_back(CV_IMWRITE_PNG_COMPRESSION);
     compression_params.push_back(9);
 
     vector<Mat> frames;
-    cap.set(CV_CAP_PROP_FRAME_WIDTH, width);
-    cap.set(CV_CAP_PROP_FRAME_HEIGHT, height);
+    //cap.set(CV_CAP_PROP_FRAME_WIDTH, width);
+    //cap.set(CV_CAP_PROP_FRAME_HEIGHT, height);
 
     Mat frame0;
     cap >> frame0;
     srand(time(0));
-    for (int i=0; i<height; i++) {
-	for (int j=0; j<width; j++) {
+    for (int i=0; i<frame0.rows; i++) {
+	for (int j=0; j<frame0.cols; j++) {
 	    for (int k=0; k<K; k++) {
 		g[i][j][k][0].mean = rand() % 256;
 		g[i][j][k][1].mean = rand() % 256;
@@ -154,8 +162,8 @@ int main(int, char**)
 	}
     }
 
-    Mat frame;
 
+    Mat frame;
 
     /*
     // copy data from host to device
@@ -200,9 +208,11 @@ int main(int, char**)
     {
 	cap >> frame; // get a new frame from camera
 
+	int width = frame.cols, height = frame.rows;
+
 	// data copy of image 
-	for (int i=0; i<height; i++) {
-	    for (int j=0; j<width; j++) {
+	for (int i=0; i<frame.rows; i++) {
+	    for (int j=0; j<frame.cols; j++) {
 		h_i[i][j][0] = frame.at<cv::Vec3b>(i, j)[0];
 		h_i[i][j][1] = frame.at<cv::Vec3b>(i, j)[1];
 		h_i[i][j][2] = frame.at<cv::Vec3b>(i, j)[2];
@@ -218,14 +228,14 @@ int main(int, char**)
 	// kernel launch
 	foreground_g<<<dimGrid, dimBlock>>>(d_frame, d_g, d_w, d_f, width, height);
 	CUDA_CHECK_RETURN(cudaDeviceSynchronize());	// Wait for the GPU launched work to complete
-	CUDA_CHECK_RETURN(cudaGetLastError());
+	//CUDA_CHECK_RETURN(cudaGetLastError());
 
 	// data copy back
 	CUDA_CHECK_RETURN(cudaMemcpy(foreground, d_f, sizeof(int) * width * height, cudaMemcpyDeviceToHost));
 
 	int num_obj_f = 0;
-	for (int i=0; i<height; i++) {
-	    for (int j=0; j<width; j++) {
+	for (int i=0; i<frame.rows; i++) {
+	    for (int j=0; j<frame.cols; j++) {
 		if (foreground[i][j] == -1) {
 		    num_obj_f++;
 		    foreground[i][j] = num_obj_f;

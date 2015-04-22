@@ -109,7 +109,7 @@ __global__ void foreground_g(int *d_imageArray, struct gaussian *d_g, float *d_w
 	//frame.at<cv::Vec3b>(i, j)[0] = 0;
 	//frame.at<cv::Vec3b>(i, j)[1] = 0;
 	//frame.at<cv::Vec3b>(i, j)[2] = 0;
-    }else{
+    } else {
 	// foreground
 	// change to black dot
 
@@ -159,28 +159,9 @@ int main(int argc, char **argv)
     }
 
     Mat frame;
+    
+    cudaStream_t stream0, stream1;
 
-
-    /*
-    // copy data from host to device
-    unsigned int size_imageArray = sizeof(float) * w * h * 3;
-    float *d_imageArray = NULL;
-    CUDA_CHECK_RETURN(cudaMalloc((void**) &d_imageArray, size_imageArray));
-    CUDA_CHECK_RETURN(cudaMemcpy(d_imageArray, h_imageArray, size_imageArray, cudaMemcpyHostToDevice));
-
-    // define grid and block dimensions
-    dim3 dimBlock(32, 32);
-    dim3 dimGrid(ceil(w/(double)dimBlock.x), ceil(h/(double)dimBlock.y));
-
-    // kernel launch
-    greyscale<<<dimGrid, dimBlock>>>(d_imageArray, w, h);
-    CUDA_CHECK_RETURN(cudaDeviceSynchronize());	// Wait for the GPU launched work to complete
-    CUDA_CHECK_RETURN(cudaGetLastError());
-
-    // copy data from device to host
-    CUDA_CHECK_RETURN(cudaMemcpy(h_imageArray, d_imageArray, size_imageArray, cudaMemcpyDeviceToHost));
-
-     */
 
     // data copy of gaussian 
     struct gaussian *d_g;

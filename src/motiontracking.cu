@@ -124,99 +124,98 @@ __global__ void foreground_g(int *d_imageArray, struct gaussian *d_g, float *d_w
 
 void *run(void *args) {
 
-    cout << "run" << endl;
-    // lock 
-    pthread_mutex_lock(&ourmutex);
+    while(1) {
+        // lock 
+        pthread_mutex_lock(&ourmutex);
 
-    cout << "run with lock" << endl;
 
-    int num_obj_f = 0;
-    for (int i=0; i<height; i++) {
-        for (int j=0; j<width; j++) {
-            if (foreground[i][j] == -1) {
-                num_obj_f++;
-                foreground[i][j] = num_obj_f;
-                y_obj[num_obj_f-1] = 0;
-                x_obj[num_obj_f-1] = 0;
-                size_obj_f[num_obj_f-1] = connected_component(i, j, foreground, 
-                        y_obj[num_obj_f-1], x_obj[num_obj_f-1]);
-                y_obj[num_obj_f-1] = y_obj[num_obj_f-1] / size_obj_f[num_obj_f-1];
-                x_obj[num_obj_f-1] = y_obj[num_obj_f-1] / size_obj_f[num_obj_f-1];
-            }
-        }
-    }
-
-    for (int k=0; k<num_obj_f; k++) {
-        if (size_obj_f[k] >= COMPONENT_THRESH) {
-            int min_dis = DISTANCE_THRESH;
-            int min_i = -1;
-            for (int i=0; i<num_obj; i++) {
-                int kf_p_x;
-                int kf_p_y;
-                kalman_predict(kf_obj[i], kf_p_y, kf_p_x);
-                if (get_distance(x_obj[k] - kf_p_x, y_obj[k] - kf_p_y) < min_dis && 
-                        (size_obj[i] - size_obj_f[k]) * (size_obj[i] - size_obj_f[k]) < SIZE_THRESH) {
-                    min_dis = get_distance(x_obj[k] - kf_p_x, y_obj[k] - kf_p_y);
-                    min_i = i;
+        int num_obj_f = 0;
+        for (int i=0; i<height; i++) {
+            for (int j=0; j<width; j++) {
+                if (foreground[i][j] == -1) {
+                    num_obj_f++;
+                    foreground[i][j] = num_obj_f;
+                    y_obj[num_obj_f-1] = 0;
+                    x_obj[num_obj_f-1] = 0;
+                    size_obj_f[num_obj_f-1] = connected_component(i, j, foreground, 
+                            y_obj[num_obj_f-1], x_obj[num_obj_f-1]);
+                    y_obj[num_obj_f-1] = y_obj[num_obj_f-1] / size_obj_f[num_obj_f-1];
+                    x_obj[num_obj_f-1] = y_obj[num_obj_f-1] / size_obj_f[num_obj_f-1];
                 }
             }
-            if (min_i == -1) {
-                size_obj[num_obj] = size_obj_f[k];
-                kf_obj[num_obj++] = kalman_init(y_obj[k], x_obj[k]);
-                min_i = num_obj-1;
-            }else{
-                size_obj[min_i] = size_obj_f[k];
-                kalman_update(kf_obj[min_i], y_obj[k], x_obj[k]);
-            }
+        }
 
-            int min_x=width, min_y=height, max_x=0, max_y=0;
-            for (int i=0; i<height; i++) {
-                for (int j=0; j<width; j++) {
-                    if (foreground[i][j] == k+1) {
-                        if (min_x > j) min_x = j;
-                        if (min_y > i) min_y = i;
-                        if (max_x < j) max_x = j;
-                        if (max_y < i) max_y = i;
-                        /*
-                           int color = 256*256*256/(min_i+1);
-                           frame.at<cv::Vec3b>(i, j)[0] = color/(256*256);
-                           frame.at<cv::Vec3b>(i, j)[1] = color/256%256;
-                           frame.at<cv::Vec3b>(i, j)[2] = color%256;
-                         */
-
+        for (int k=0; k<num_obj_f; k++) {
+            if (size_obj_f[k] >= COMPONENT_THRESH) {
+                int min_dis = DISTANCE_THRESH;
+                int min_i = -1;
+                for (int i=0; i<num_obj; i++) {
+                    int kf_p_x;
+                    int kf_p_y;
+                    kalman_predict(kf_obj[i], kf_p_y, kf_p_x);
+                    if (get_distance(x_obj[k] - kf_p_x, y_obj[k] - kf_p_y) < min_dis && 
+                            (size_obj[i] - size_obj_f[k]) * (size_obj[i] - size_obj_f[k]) < SIZE_THRESH) {
+                        min_dis = get_distance(x_obj[k] - kf_p_x, y_obj[k] - kf_p_y);
+                        min_i = i;
                     }
                 }
-            }
-            for (int i=min_x; i<=max_x; i++) {
-                frame.at<cv::Vec3b>(min_y, i)[0] = 255;
-                frame.at<cv::Vec3b>(min_y, i)[1] = 255;
-                frame.at<cv::Vec3b>(min_y, i)[2] = 255;
-                frame.at<cv::Vec3b>(min_y, i)[min_i % 3] = 0;
+                if (min_i == -1) {
+                    size_obj[num_obj] = size_obj_f[k];
+                    kf_obj[num_obj++] = kalman_init(y_obj[k], x_obj[k]);
+                    min_i = num_obj-1;
+                }else{
+                    size_obj[min_i] = size_obj_f[k];
+                    kalman_update(kf_obj[min_i], y_obj[k], x_obj[k]);
+                }
 
-                frame.at<cv::Vec3b>(max_y, i)[0] = 255;
-                frame.at<cv::Vec3b>(max_y, i)[1] = 255;
-                frame.at<cv::Vec3b>(max_y, i)[2] = 255;
-                frame.at<cv::Vec3b>(max_y, i)[min_i % 3] = 0;
-            }
-            for (int i=min_y; i<=max_y; i++) {
-                frame.at<cv::Vec3b>(i, min_x)[0] = 255;
-                frame.at<cv::Vec3b>(i, min_x)[1] = 255;
-                frame.at<cv::Vec3b>(i, min_x)[2] = 255;
-                frame.at<cv::Vec3b>(i, min_x)[min_i % 3] = 0;
+                int min_x=width, min_y=height, max_x=0, max_y=0;
+                for (int i=0; i<height; i++) {
+                    for (int j=0; j<width; j++) {
+                        if (foreground[i][j] == k+1) {
+                            if (min_x > j) min_x = j;
+                            if (min_y > i) min_y = i;
+                            if (max_x < j) max_x = j;
+                            if (max_y < i) max_y = i;
+                            /*
+                               int color = 256*256*256/(min_i+1);
+                               frame.at<cv::Vec3b>(i, j)[0] = color/(256*256);
+                               frame.at<cv::Vec3b>(i, j)[1] = color/256%256;
+                               frame.at<cv::Vec3b>(i, j)[2] = color%256;
+                             */
 
-                frame.at<cv::Vec3b>(i, max_x)[0] = 255;
-                frame.at<cv::Vec3b>(i, max_x)[1] = 255;
-                frame.at<cv::Vec3b>(i, max_x)[2] = 255;
-                frame.at<cv::Vec3b>(i, max_x)[min_i % 3] = 0;
+                        }
+                    }
+                }
+                for (int i=min_x; i<=max_x; i++) {
+                    frame.at<cv::Vec3b>(min_y, i)[0] = 255;
+                    frame.at<cv::Vec3b>(min_y, i)[1] = 255;
+                    frame.at<cv::Vec3b>(min_y, i)[2] = 255;
+                    frame.at<cv::Vec3b>(min_y, i)[min_i % 3] = 0;
+
+                    frame.at<cv::Vec3b>(max_y, i)[0] = 255;
+                    frame.at<cv::Vec3b>(max_y, i)[1] = 255;
+                    frame.at<cv::Vec3b>(max_y, i)[2] = 255;
+                    frame.at<cv::Vec3b>(max_y, i)[min_i % 3] = 0;
+                }
+                for (int i=min_y; i<=max_y; i++) {
+                    frame.at<cv::Vec3b>(i, min_x)[0] = 255;
+                    frame.at<cv::Vec3b>(i, min_x)[1] = 255;
+                    frame.at<cv::Vec3b>(i, min_x)[2] = 255;
+                    frame.at<cv::Vec3b>(i, min_x)[min_i % 3] = 0;
+
+                    frame.at<cv::Vec3b>(i, max_x)[0] = 255;
+                    frame.at<cv::Vec3b>(i, max_x)[1] = 255;
+                    frame.at<cv::Vec3b>(i, max_x)[2] = 255;
+                    frame.at<cv::Vec3b>(i, max_x)[min_i % 3] = 0;
+                }
             }
         }
+
+
+        cv::imshow("something", frame);
+        waitKey(1);
+        // release lock
     }
-
-
-    cv::imshow("something", frame);
-    waitKey(1);
-    // release lock
-    pthread_mutex_unlock(&ourmutex);
     pthread_exit(NULL);
 }
 
@@ -290,6 +289,10 @@ int main(int argc, char **argv)
 
     pthread_t thread;
 
+    if (pthread_create(&thread, NULL, &run, NULL) != 0) {
+        fprintf(stderr, "pthread create failed\n");
+    }
+
     for(;;)
     {
         cap >> frame; // get a new frame from camera
@@ -319,10 +322,8 @@ int main(int argc, char **argv)
 
         CUDA_CHECK_RETURN(cudaDeviceSynchronize());	// Wait for the GPU launched work to complete
         CUDA_CHECK_RETURN(cudaGetLastError());
-    
-        if (pthread_create(&thread, NULL, &run, NULL) != 0) {
-            fprintf(stderr, "pthread create failed\n");
-        }
+
+        pthread_mutex_unlock(&ourmutex);
     }
     return 0;
 }

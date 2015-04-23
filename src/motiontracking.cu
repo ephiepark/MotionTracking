@@ -152,7 +152,12 @@ int main(int argc, char **argv)
 
     VideoWriter out;
     if(output) {
-	out.open(output, static_cast<int>(cap.get(CV_CAP_PROP_FOURCC)), cap.get(CV_CAP_PROP_FPS), Size(width, height), true);
+	out.open(output, -1, cap.get(CV_CAP_PROP_FPS), Size(width, height), true);
+
+	if(!out.isOpened()) {
+	    fprintf(stderr, "Failed to open output video file.\n");
+	    return -1;
+	}
     }
 
     Mat frame0;
@@ -317,7 +322,7 @@ int main(int argc, char **argv)
 	    }
 	}
 
-	if(output) {
+	if(out.isOpened()) {
 	    out << frame;
 	} else {
 	    cv::imshow("output", frame);

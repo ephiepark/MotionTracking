@@ -27,6 +27,7 @@ int num_obj = 0;
 Mat frame;
 
 pthread_mutex_t ourmutex;
+int s_lock;
 
 /**
  * This macro checks return value of the CUDA runtime call and exits
@@ -126,8 +127,11 @@ void *run(void *args) {
 
     while(1) {
         // lock 
-        pthread_mutex_lock(&ourmutex);
-
+        //pthread_mutex_lock(&ourmutex);
+        while(1) {
+            if (s_lock == 0)
+                break;
+        }
 
         int num_obj_f = 0;
         for (int i=0; i<height; i++) {
@@ -289,6 +293,7 @@ int main(int argc, char **argv)
 
     pthread_t thread;
 
+    s_lock = 1;
     if (pthread_create(&thread, NULL, &run, NULL) != 0) {
         fprintf(stderr, "pthread create failed\n");
     }
@@ -323,7 +328,8 @@ int main(int argc, char **argv)
         CUDA_CHECK_RETURN(cudaDeviceSynchronize());	// Wait for the GPU launched work to complete
         CUDA_CHECK_RETURN(cudaGetLastError());
 
-        pthread_mutex_unlock(&ourmutex);
+        s_lock = 0;
+//        pthread_mutex_unlock(&ourmutex);
     }
     return 0;
 }

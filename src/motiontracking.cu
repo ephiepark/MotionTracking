@@ -29,12 +29,12 @@ Mat frame;
  * This macro checks return value of the CUDA runtime call and exits
  * the application if the call failed.
  */
-#define CUDA_CHECK_RETURN(value) {											\
-    cudaError_t _m_cudaStat = value;										\
-    if (_m_cudaStat != cudaSuccess) {										\
-	fprintf(stderr, "Error %s at line %d in file %s\n",					\
-		cudaGetErrorString(_m_cudaStat), __LINE__, __FILE__);		\
-	exit(1);															\
+#define CUDA_CHECK_RETURN(value) {	\
+    cudaError_t _m_cudaStat = value; \
+    if (_m_cudaStat != cudaSuccess) {	\
+	fprintf(stderr, "Error %s at line %d in file %s\n",	\
+		cudaGetErrorString(_m_cudaStat), __LINE__, __FILE__);	\
+	exit(1);	\
     } }
 
 
@@ -149,7 +149,7 @@ int main(int argc, char **argv)
 
     VideoWriter out;
     if(output) {
-	out.open(output, -1, cap.get(CV_CAP_PROP_FPS), Size(width, height), true);
+	out.open(output, CV_FOURCC('8', 'B', 'P', 'S'), cap.get(CV_CAP_PROP_FPS), Size(width, height), true);
 
 	if(!out.isOpened()) {
 	    fprintf(stderr, "Failed to open output video file.\n");
@@ -360,7 +360,6 @@ int main(int argc, char **argv)
 	CUDA_CHECK_RETURN(cudaGetLastError());
 
 	turn = 1 - turn;
-	//        pthread_mutex_unlock(&ourmutex);
     }
     return 0;
 }

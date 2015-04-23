@@ -1,6 +1,7 @@
 #include <vector>
 #include <cstdlib>
 #include <ctime>
+#include <pthread.h>
 #include "opencv2/opencv.hpp"
 
 #include "helper_functions.h"
@@ -23,7 +24,9 @@ KalmanFilter kf_obj[height*width];
 int size_obj[height*width];
 int num_obj = 0;
 
-pthread_mutex_t mutex;
+Mat frame;
+
+pthread_mutex_t ourmutex;
 
 /**
  * This macro checks return value of the CUDA runtime call and exits
@@ -121,8 +124,11 @@ __global__ void foreground_g(int *d_imageArray, struct gaussian *d_g, float *d_w
 
 void *run(void *args) {
 
+    cout << "run" << endl;
     // lock 
-    pthread_mutex_lock(&mutex);
+    pthread_mutex_lock(&ourmutex);
+
+    cout << "run with lock" << endl;
 
     int num_obj_f = 0;
     for (int i=0; i<height; i++) {
@@ -210,7 +216,8 @@ void *run(void *args) {
     cv::imshow("something", frame);
     waitKey(1);
     // release lock
-    pthread_mutex_unlock(&mutex);
+    pthread_mutex_unlock(&ourmutex);
+    pthread_exit(NULL);
 }
 
 int main(int argc, char **argv)
@@ -224,13 +231,12 @@ int main(int argc, char **argv)
     if(!cap.isOpened())  // check if we succeeded
         return -1;
 
-    pthread_mutex_init(&mutex, NULL);
+    pthread_mutex_init(&ourmutex, NULL);
 
     vector<int> compression_params;
     compression_params.push_back(CV_IMWRITE_PNG_COMPRESSION);
     compression_params.push_back(9);
 
-    vector<Mat> frames;
     cap.set(CV_CAP_PROP_FRAME_WIDTH, width);
     cap.set(CV_CAP_PROP_FRAME_HEIGHT, height);
 
@@ -254,8 +260,6 @@ int main(int argc, char **argv)
             w[i][j][0] = 1;
         }
     }
-
-    Mat frame;
 
     cudaStream_t stream0, stream1;
     CUDA_CHECK_RETURN(cudaStreamCreate( &stream0 ));
@@ -284,7 +288,7 @@ int main(int argc, char **argv)
     CUDA_CHECK_RETURN(cudaMalloc((void **) &d_frame0, size_frame_per_stream));
     CUDA_CHECK_RETURN(cudaMalloc((void **) &d_frame1, size_frame_per_stream));
 
-    pthread thread;
+    pthread_t thread;
 
     for(;;)
     {

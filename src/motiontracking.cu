@@ -13,19 +13,13 @@ using namespace cv;
 int num_obj = 0;
 
 Mat frame;
-struct gaussian *h_g;
-float w[height][width][K];
-int foreground[2][height][width];
+
 int size_obj_f[width*height];
 int x_obj[width*height];
 int y_obj[width*height];
 int h_i[height][width][3];
 KalmanFilter kf_obj[height*width];
 int size_obj[height*width];
-
-inline struct gaussian& g(int rowIndex, int colIndex, int k, int color) {
-    return h_g[(rowIndex * width + colIndex) * K * 3 + k * 3 + color];
-}
 
 /**
  * This macro checks return value of the CUDA runtime call and exits
@@ -133,7 +127,12 @@ int main(int argc, char **argv) {
        int size_obj[height*width];
      */
 
-    h_g = new gaussian[height * width * K * 3];
+    size_t size_w = height * width * K;
+    size_t size_g = size_w * 3;
+    size_t size_f = height * width * 2;
+    h_w = new float[size_w];
+    h_g = new gaussian[size_g];
+    h_f = new int[size_f];
 
     VideoCapture cap;
     char *output = NULL;
@@ -184,12 +183,12 @@ int main(int argc, char **argv) {
                 g(i, j, k, 0).variance = INIT_VARIANCE;
                 g(i, j, k, 1).variance = INIT_VARIANCE;
                 g(i, j, k, 2).variance = INIT_VARIANCE;
-                w[i][j][k] = 0;
+                w(i, j, k) = 0;
             }
             g(i, j, 0, 0).mean = frame0.at<cv::Vec3b>(i, j)[0];
             g(i, j, 0, 1).mean = frame0.at<cv::Vec3b>(i, j)[1];
             g(i, j, 0, 2).mean = frame0.at<cv::Vec3b>(i, j)[2];    
-            w[i][j][0] = 1;
+            w(i, j, 0) = 1;
         }
     }
 
@@ -207,7 +206,7 @@ int main(int argc, char **argv) {
     float *d_w;
     size_t size_w_per_stream = sizeof(float) * K * width * height / 2;
     CUDA_CHECK_RETURN(cudaMalloc((void **) &d_w, sizeof(float) * K * width * height));
-    CUDA_CHECK_RETURN(cudaMemcpy(d_w, w, sizeof(float) * K * width * height, cudaMemcpyHostToDevice));
+    CUDA_CHECK_RETURN(cudaMemcpy(d_w, h_w, sizeof(float) * K * width * height, cudaMemcpyHostToDevice));
 
     // data allocation of foreground
     int *d_f;
@@ -244,8 +243,8 @@ int main(int argc, char **argv) {
     foreground_g<<<dimGrid, dimBlock, 0, stream1>>>(d_frame1, (gaussian *)((char*)(d_g) + size_g_per_stream), (float*)((char*)(d_w) + size_w_per_stream), (int*)((char*)(d_f) + size_f_per_stream));
 
     // async copy data back
-    CUDA_CHECK_RETURN(cudaMemcpyAsync(foreground[turn], d_f, size_f_per_stream, cudaMemcpyDeviceToHost, stream0));
-    CUDA_CHECK_RETURN(cudaMemcpyAsync((char*)(foreground[turn]) + size_f_per_stream, (char*)(d_f) + size_f_per_stream, size_f_per_stream, cudaMemcpyDeviceToHost, stream1));
+    CUDA_CHECK_RETURN(cudaMemcpyAsync(h_f + turn * height * width, d_f, size_f_per_stream, cudaMemcpyDeviceToHost, stream0));
+    CUDA_CHECK_RETURN(cudaMemcpyAsync((char*)(h_f + turn * height * width) + size_f_per_stream, (char*)(d_f) + size_f_per_stream, size_f_per_stream, cudaMemcpyDeviceToHost, stream1));
 
     CUDA_CHECK_RETURN(cudaDeviceSynchronize()); // Wait for the GPU launched work to complete
     CUDA_CHECK_RETURN(cudaGetLastError());
@@ -277,19 +276,19 @@ int main(int argc, char **argv) {
         foreground_g<<<dimGrid, dimBlock, 0, stream1>>>(d_frame1, (gaussian *)((char*)(d_g) + size_g_per_stream), (float*)((char*)(d_w) + size_w_per_stream), (int*)((char*)(d_f) + size_f_per_stream));
 
         // async copy data back
-        CUDA_CHECK_RETURN(cudaMemcpyAsync(foreground[turn], d_f, size_f_per_stream, cudaMemcpyDeviceToHost, stream0));
-        CUDA_CHECK_RETURN(cudaMemcpyAsync((char*)(foreground[turn]) + size_f_per_stream, (char*)(d_f) + size_f_per_stream, size_f_per_stream, cudaMemcpyDeviceToHost, stream1));
+        CUDA_CHECK_RETURN(cudaMemcpyAsync(h_f + turn * height * width, d_f, size_f_per_stream, cudaMemcpyDeviceToHost, stream0));
+        CUDA_CHECK_RETURN(cudaMemcpyAsync((char*)(h_f + turn * height * width) + size_f_per_stream, (char*)(d_f) + size_f_per_stream, size_f_per_stream, cudaMemcpyDeviceToHost, stream1));
 
 
         int num_obj_f = 0;
         for (int i=0; i<height; i++) {
             for (int j=0; j<width; j++) {
-                if (foreground[1 - turn][i][j] == -1) {
+                if (foreground(1 - turn, i, j) == -1) {
                     num_obj_f++;
-                    foreground[1 - turn][i][j] = num_obj_f;
+                    foreground(1 - turn, i, j) = num_obj_f;
                     y_obj[num_obj_f-1] = 0;
                     x_obj[num_obj_f-1] = 0;
-                    size_obj_f[num_obj_f-1] = connected_component(i, j, foreground[1 - turn], 
+                    size_obj_f[num_obj_f-1] = connected_component(i, j, h_f + (1 - turn) * height * width, 
                             y_obj[num_obj_f-1], x_obj[num_obj_f-1]);
                     y_obj[num_obj_f-1] = y_obj[num_obj_f-1] / size_obj_f[num_obj_f-1];
                     x_obj[num_obj_f-1] = y_obj[num_obj_f-1] / size_obj_f[num_obj_f-1];
@@ -323,18 +322,11 @@ int main(int argc, char **argv) {
                 int min_x=width, min_y=height, max_x=0, max_y=0;
                 for (int i=0; i<height; i++) {
                     for (int j=0; j<width; j++) {
-                        if (foreground[1 - turn][i][j] == k+1) {
+                        if (foreground(1 - turn, i, j) == k+1) {
                             if (min_x > j) min_x = j;
                             if (min_y > i) min_y = i;
                             if (max_x < j) max_x = j;
                             if (max_y < i) max_y = i;
-                            /*
-                               int color = 256*256*256/(min_i+1);
-                               frame.at<cv::Vec3b>(i, j)[0] = color/(256*256);
-                               frame.at<cv::Vec3b>(i, j)[1] = color/256%256;
-                               frame.at<cv::Vec3b>(i, j)[2] = color%256;
-                             */
-
                         }
                     }
                 }

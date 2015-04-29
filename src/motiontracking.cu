@@ -10,12 +10,8 @@
 using namespace std;
 using namespace cv;
 
-int num_obj = 0;
 
 Mat frame;
-
-
-int h_i[height][width][3];
 
 /**
  * This macro checks return value of the CUDA runtime call and exits
@@ -33,13 +29,13 @@ int h_i[height][width][3];
 //
 // __global__ kernel for Gaussian
 //
-__global__ void foreground_g(int *d_imageArray, struct gaussian *d_g, float *d_w, int *d_f) {
+__global__ void foreground_g(int *d_imageArray, struct gaussian *d_g, float *d_w, int *d_f, int w, int h) {
     unsigned int i = blockIdx.y * blockDim.y + threadIdx.y;
     unsigned int j = blockIdx.x * blockDim.x + threadIdx.x;
 
-    if(!(i < height/2 && j < width)) return; //do nothing if indices are invalid
+    if(!(i < h/2 && j < w)) return; //do nothing if indices are invalid
 
-    unsigned int idx = ((i * width) + j);
+    unsigned int idx = ((i * w) + j);
 
     int p_r = d_imageArray[idx * 3]; // frame.at<cv::Vec3b>(i, j)[0];
     int p_g = d_imageArray[idx * 3 + 1]; // frame.at<cv::Vec3b>(i, j)[1];
@@ -111,31 +107,6 @@ __global__ void foreground_g(int *d_imageArray, struct gaussian *d_g, float *d_w
 }
 
 int main(int argc, char **argv) {
-    /*
-       struct gaussian g[height][width][K][3];
-       float w[height][width][K];
-       int foreground[2][height][width];
-       int size_obj_f[width*height];
-       int x_obj[width*height];
-       int y_obj[width*height];
-       int h_i[height][width][3];
-       KalmanFilter kf_obj[height*width];
-       int size_obj[height*width];
-     */
-
-    size_t size_w = height * width * K;
-    size_t size_g = size_w * 3;
-    size_t size_f = height * width * 2;
-    h_w = new float[size_w];
-    h_g = new gaussian[size_g];
-    h_f = new int[size_f];
-
-    size_t size_frame = height * width;
-    int *size_obj_f = new int[size_frame];
-    int *x_obj = new int[size_frame];
-    int *y_obj = new int[size_frame];
-    int *size_obj = new int[size_frame];
-    KalmanFilter *kf_obj = new KalmanFilter[size_frame];
 
     VideoCapture cap;
     char *output = NULL;
@@ -161,10 +132,31 @@ int main(int argc, char **argv) {
     compression_params.push_back(CV_IMWRITE_PNG_COMPRESSION);
     compression_params.push_back(9);
 
-    cap.set(CV_CAP_PROP_FRAME_WIDTH, width);
-    cap.set(CV_CAP_PROP_FRAME_HEIGHT, height);
+    width = cap.get(CV_CAP_PROP_FRAME_WIDTH);
+    height = cap.get(CV_CAP_PROP_FRAME_HEIGHT);
+
+    int num_obj = 0;
+
+    size_t size_w = height * width * K;
+    size_t size_g = size_w * 3;
+    size_t size_f = height * width * 2;
+    h_w = new float[size_w];
+    h_g = new gaussian[size_g];
+    h_f = new int[size_f];
+
+    size_t size_frame = height * width;
+    int *size_obj_f = new int[size_frame];
+    int *x_obj = new int[size_frame];
+    int *y_obj = new int[size_frame];
+    int *size_obj = new int[size_frame];
+    KalmanFilter *kf_obj = new KalmanFilter[size_frame];
+
+    int *h_i = new int[size_frame * 3];
+    qx = new int[size_frame];
+    qy = new int[size_frame];
 
     VideoWriter out;
+
     if(output) {
 	out.open(output, CV_FOURCC('8', 'B', 'P', 'S'), cap.get(CV_CAP_PROP_FPS), Size(width, height), true);
 
@@ -229,9 +221,9 @@ int main(int argc, char **argv) {
     // data copy of image 
     for (int i=0; i<height; i++) {
 	for (int j=0; j<width; j++) {
-	    h_i[i][j][0] = frame.at<cv::Vec3b>(i, j)[0];
-	    h_i[i][j][1] = frame.at<cv::Vec3b>(i, j)[1];
-	    h_i[i][j][2] = frame.at<cv::Vec3b>(i, j)[2];
+	    h_i[((i * width) + j) * 3 + 0] = frame.at<cv::Vec3b>(i, j)[0];
+	    h_i[((i * width) + j) * 3 + 1] = frame.at<cv::Vec3b>(i, j)[1];
+	    h_i[((i * width) + j) * 3 + 2] = frame.at<cv::Vec3b>(i, j)[2];
 	}
     }
     CUDA_CHECK_RETURN(cudaMemcpyAsync(d_frame0, h_i, size_frame_per_stream, cudaMemcpyHostToDevice, stream0));
@@ -242,8 +234,8 @@ int main(int argc, char **argv) {
     dim3 dimGrid(ceil(width/(double)dimBlock.x), ceil(height/2/(double)dimBlock.y));
 
     // kernel launch
-    foreground_g<<<dimGrid, dimBlock, 0, stream0>>>(d_frame0, d_g, d_w, d_f);
-    foreground_g<<<dimGrid, dimBlock, 0, stream1>>>(d_frame1, (gaussian *)((char*)(d_g) + size_g_per_stream), (float*)((char*)(d_w) + size_w_per_stream), (int*)((char*)(d_f) + size_f_per_stream));
+    foreground_g<<<dimGrid, dimBlock, 0, stream0>>>(d_frame0, d_g, d_w, d_f, width, height);
+    foreground_g<<<dimGrid, dimBlock, 0, stream1>>>(d_frame1, (gaussian *)((char*)(d_g) + size_g_per_stream), (float*)((char*)(d_w) + size_w_per_stream), (int*)((char*)(d_f) + size_f_per_stream), width, height);
 
     // async copy data back
     CUDA_CHECK_RETURN(cudaMemcpyAsync(h_f + turn * height * width, d_f, size_f_per_stream, cudaMemcpyDeviceToHost, stream0));
@@ -262,9 +254,9 @@ int main(int argc, char **argv) {
 	// data copy of image 
 	for (int i=0; i<height; i++) {
 	    for (int j=0; j<width; j++) {
-		h_i[i][j][0] = frame.at<cv::Vec3b>(i, j)[0];
-		h_i[i][j][1] = frame.at<cv::Vec3b>(i, j)[1];
-		h_i[i][j][2] = frame.at<cv::Vec3b>(i, j)[2];
+		h_i[((i * width) + j) * 3 + 0] = frame.at<cv::Vec3b>(i, j)[0];
+		h_i[((i * width) + j) * 3 + 1] = frame.at<cv::Vec3b>(i, j)[1];
+		h_i[((i * width) + j) * 3 + 2] = frame.at<cv::Vec3b>(i, j)[2];
 	    }
 	}
 	CUDA_CHECK_RETURN(cudaMemcpyAsync(d_frame0, h_i, size_frame_per_stream, cudaMemcpyHostToDevice, stream0));
@@ -275,8 +267,8 @@ int main(int argc, char **argv) {
 	dim3 dimGrid(ceil(width/(double)dimBlock.x), ceil(height/2/(double)dimBlock.y));
 
 	// kernel launch
-	foreground_g<<<dimGrid, dimBlock, 0, stream0>>>(d_frame0, d_g, d_w, d_f);
-	foreground_g<<<dimGrid, dimBlock, 0, stream1>>>(d_frame1, (gaussian *)((char*)(d_g) + size_g_per_stream), (float*)((char*)(d_w) + size_w_per_stream), (int*)((char*)(d_f) + size_f_per_stream));
+	foreground_g<<<dimGrid, dimBlock, 0, stream0>>>(d_frame0, d_g, d_w, d_f, width, height);
+	foreground_g<<<dimGrid, dimBlock, 0, stream1>>>(d_frame1, (gaussian *)((char*)(d_g) + size_g_per_stream), (float*)((char*)(d_w) + size_w_per_stream), (int*)((char*)(d_f) + size_f_per_stream), width, height);
 
 	// async copy data back
 	CUDA_CHECK_RETURN(cudaMemcpyAsync(h_f + turn * height * width, d_f, size_f_per_stream, cudaMemcpyDeviceToHost, stream0));
@@ -307,8 +299,8 @@ int main(int argc, char **argv) {
 		    int kf_p_x;
 		    int kf_p_y;
 		    kalman_predict(kf_obj[i], kf_p_y, kf_p_x);
-		    if (get_distance(x_obj[k] - kf_p_x, y_obj[k] - kf_p_y) < min_dis && 
-			    (size_obj[i] - size_obj_f[k]) * (size_obj[i] - size_obj_f[k]) < SIZE_THRESH) {
+		    if (get_distance(x_obj[k] - kf_p_x, y_obj[k] - kf_p_y) < max(min_dis, size_obj_f[k]) /*&& 
+			    (size_obj[i] - size_obj_f[k]) * (size_obj[i] - size_obj_f[k]) < SIZE_THRESH*/) {
 			min_dis = get_distance(x_obj[k] - kf_p_x, y_obj[k] - kf_p_y);
 			min_i = i;
 		    }

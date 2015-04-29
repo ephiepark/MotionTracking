@@ -24,13 +24,14 @@ const float BACKGROUND_THRESH = 0.9;
 const float COMPONENT_THRESH = 100;
 const int DISTANCE_THRESH = 100000;
 const int SIZE_THRESH = 1000000;
-const int width = 640, height = 480;
+
+int width, height;
 
 struct gaussian *h_g;
 float *h_w;
 int *h_f;
 
-int qx[width*height], qy[width*height];
+int *qx, *qy;
 
 struct gaussian {
     float mean;

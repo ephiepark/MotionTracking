@@ -10,31 +10,33 @@
 using namespace std;
 using namespace cv;
 
-struct gaussian g[height][width][K][3];
+int num_obj = 0;
+
+Mat frame;
+struct gaussian *h_g;
 float w[height][width][K];
 int foreground[2][height][width];
-
 int size_obj_f[width*height];
 int x_obj[width*height];
 int y_obj[width*height];
 int h_i[height][width][3];
-
 KalmanFilter kf_obj[height*width];
 int size_obj[height*width];
-int num_obj = 0;
 
-Mat frame;
+inline struct gaussian& g(int rowIndex, int colIndex, int k, int color) {
+    return h_g[(rowIndex * width + colIndex) * K * 3 + k * 3 + color];
+}
 
 /**
  * This macro checks return value of the CUDA runtime call and exits
  * the application if the call failed.
  */
-#define CUDA_CHECK_RETURN(value) {	\
+#define CUDA_CHECK_RETURN(value) {      \
     cudaError_t _m_cudaStat = value; \
-    if (_m_cudaStat != cudaSuccess) {	\
-	fprintf(stderr, "Error %s at line %d in file %s\n",	\
-		cudaGetErrorString(_m_cudaStat), __LINE__, __FILE__);	\
-	exit(1);	\
+    if (_m_cudaStat != cudaSuccess) {   \
+        fprintf(stderr, "Error %s at line %d in file %s\n",     \
+                cudaGetErrorString(_m_cudaStat), __LINE__, __FILE__);   \
+        exit(1);        \
     } }
 
 
@@ -55,89 +57,102 @@ __global__ void foreground_g(int *d_imageArray, struct gaussian *d_g, float *d_w
     float min = -1;
     int min_ind = -1;
     for (int k=0; k<K; k++) {
-	float z_r = getZ(p_r, d_g[idx * K * 3 + k * 3] /*g[i][j][k][0]*/);
-	float z_g = getZ(p_g, d_g[idx * K * 3 + k * 3 + 1] /*g[i][j][k][1]*/);
-	float z_b = getZ(p_b, d_g[idx * K * 3 + k * 3 + 2] /*g[i][j][k][2]*/);
-	float z_sum = z_r + z_g + z_b; 
-	if (min == -1 || min > z_sum) {
-	    min = z_sum;
-	    min_ind = k;
-	}
+        float z_r = getZ(p_r, d_g[idx * K * 3 + k * 3] /*g[i][j][k][0]*/);
+        float z_g = getZ(p_g, d_g[idx * K * 3 + k * 3 + 1] /*g[i][j][k][1]*/);
+        float z_b = getZ(p_b, d_g[idx * K * 3 + k * 3 + 2] /*g[i][j][k][2]*/);
+        float z_sum = z_r + z_g + z_b; 
+        if (min == -1 || min > z_sum) {
+            min = z_sum;
+            min_ind = k;
+        }
     }
     if (min > DEVIATION_SQ_THRESH) {
-	min_ind = -1;
+        min_ind = -1;
     }
     for (int k=0; k<K; k++) {
-	if (k == min_ind) {
-	    d_w[idx * K + k] /* w[i][j][k] */ = update_weight( d_w[idx * K + k] /* w[i][j][k] */, L_A, 1);
-	    update_distribution(p_r, &d_g[idx * K * 3 + k * 3] /* g[i][j][k][0] */);
-	    update_distribution(p_g, &d_g[idx * K * 3 + k * 3 + 1] /* g[i][j][k][1] */);
-	    update_distribution(p_b, &d_g[idx * K * 3 + k * 3 + 2] /* g[i][j][k][2] */);
-	}else{
-	    d_w[idx * K + k] /* w[i][j][k] */ = update_weight(d_w[idx * K + k] /* w[i][j][k] */, L_A, 0);
-	}
+        if (k == min_ind) {
+            d_w[idx * K + k] /* w[i][j][k] */ = update_weight( d_w[idx * K + k] /* w[i][j][k] */, L_A, 1);
+            update_distribution(p_r, &d_g[idx * K * 3 + k * 3] /* g[i][j][k][0] */);
+            update_distribution(p_g, &d_g[idx * K * 3 + k * 3 + 1] /* g[i][j][k][1] */);
+            update_distribution(p_b, &d_g[idx * K * 3 + k * 3 + 2] /* g[i][j][k][2] */);
+        }else{
+            d_w[idx * K + k] /* w[i][j][k] */ = update_weight(d_w[idx * K + k] /* w[i][j][k] */, L_A, 0);
+        }
     }
     if (min_ind == -1) {
-	min = -1;
-	for (int k=0; k<K; k++) {
-	    if (min == -1 || min > d_w[idx * K + k] /* w[i][j][k] */) { // replacement policy can be changed
-		min = d_w[idx * K + k]; // w[i][j][k];
-		min_ind = k;
-	    }
-	}
-	d_g[idx * K * 3 + min_ind * 3].mean /* g[i][j][min_ind][0].mean */ = p_r;
-	d_g[idx * K * 3 + min_ind * 3].variance /* g[i][j][min_ind][0].variance */  = INIT_VARIANCE;
-	d_g[idx * K * 3 + min_ind * 3 + 1].mean /* g[i][j][min_ind][1].mean */ = p_g;
-	d_g[idx * K * 3 + min_ind * 3 + 1].variance /* g[i][j][min_ind][1].variance */ = INIT_VARIANCE;
-	d_g[idx * K * 3 + min_ind * 3 + 2].mean /* g[i][j][min_ind][2].mean */ = p_b;
-	d_g[idx * K * 3 + min_ind * 3 + 2].variance /* g[i][j][min_ind][2].variance */ = INIT_VARIANCE;
-	d_w[idx * K + min_ind] /* w[i][j][min_ind] */ = INIT_MIXPROP;
+        min = -1;
+        for (int k=0; k<K; k++) {
+            if (min == -1 || min > d_w[idx * K + k] /* w[i][j][k] */) { // replacement policy can be changed
+                min = d_w[idx * K + k]; // w[i][j][k];
+                min_ind = k;
+            }
+        }
+        d_g[idx * K * 3 + min_ind * 3].mean /* g[i][j][min_ind][0].mean */ = p_r;
+        d_g[idx * K * 3 + min_ind * 3].variance /* g[i][j][min_ind][0].variance */  = INIT_VARIANCE;
+        d_g[idx * K * 3 + min_ind * 3 + 1].mean /* g[i][j][min_ind][1].mean */ = p_g;
+        d_g[idx * K * 3 + min_ind * 3 + 1].variance /* g[i][j][min_ind][1].variance */ = INIT_VARIANCE;
+        d_g[idx * K * 3 + min_ind * 3 + 2].mean /* g[i][j][min_ind][2].mean */ = p_b;
+        d_g[idx * K * 3 + min_ind * 3 + 2].variance /* g[i][j][min_ind][2].variance */ = INIT_VARIANCE;
+        d_w[idx * K + min_ind] /* w[i][j][min_ind] */ = INIT_MIXPROP;
     }
     // renormalized weight
     float sum = 0;
     for (int k=0; k<K; k++) {
-	sum += d_w[idx * K + k]; /* w[i][j][k] */
+        sum += d_w[idx * K + k]; /* w[i][j][k] */
     }
     for (int k=0; k<K; k++) {
-	d_w[idx * K + k] = d_w[idx * K + k] / sum; // w[i][j][k] = w[i][j][k] / sum;
+        d_w[idx * K + k] = d_w[idx * K + k] / sum; // w[i][j][k] = w[i][j][k] / sum;
     }
 
     if (is_background(min_ind, &d_w[idx * K] /*w[i][j]*/, &d_g[idx * K * 3] /*g[i][j]*/)){
-	// background
+        // background
 
-	d_f[idx] = 0; // foreground[i][j] = 0;
+        d_f[idx] = 0; // foreground[i][j] = 0;
 
-	//frame.at<cv::Vec3b>(i, j)[0] = 0;
-	//frame.at<cv::Vec3b>(i, j)[1] = 0;
-	//frame.at<cv::Vec3b>(i, j)[2] = 0;
+        //frame.at<cv::Vec3b>(i, j)[0] = 0;
+        //frame.at<cv::Vec3b>(i, j)[1] = 0;
+        //frame.at<cv::Vec3b>(i, j)[2] = 0;
     } else {
-	// foreground
-	// change to black dot
+        // foreground
+        // change to black dot
 
-	d_f[idx] = -1; // foreground[i][j] = -1;         
+        d_f[idx] = -1; // foreground[i][j] = -1;         
     }
 }
 
-int main(int argc, char **argv)
-{
+int main(int argc, char **argv) {
+    /*
+       struct gaussian g[height][width][K][3];
+       float w[height][width][K];
+       int foreground[2][height][width];
+       int size_obj_f[width*height];
+       int x_obj[width*height];
+       int y_obj[width*height];
+       int h_i[height][width][3];
+       KalmanFilter kf_obj[height*width];
+       int size_obj[height*width];
+     */
+
+    h_g = new gaussian[height * width * K * 3];
+
     VideoCapture cap;
     char *output = NULL;
     if(argc == 1) {
-	cap.open(0);
+        cap.open(0);
     } else if(argc == 2) {
-	cap.open(argv[1]);
+        cap.open(argv[1]);
     } else if(argc == 3) {
-	if(strcmp(argv[1], "cam") == 0) {
-	    cap.open(0);
-	} else {
-	    cap.open(argv[1]);
-	}
-	output = argv[2];
+        if(strcmp(argv[1], "cam") == 0) {
+            cap.open(0);
+        } else {
+            cap.open(argv[1]);
+        }
+        output = argv[2];
     }
 
     if(!cap.isOpened()) {
-	fprintf(stderr, "Failed to open video source.\n");
-	return -1;
+        fprintf(stderr, "Failed to open video source.\n");
+        return -1;
     }
 
     vector<int> compression_params;
@@ -149,33 +164,33 @@ int main(int argc, char **argv)
 
     VideoWriter out;
     if(output) {
-	out.open(output, CV_FOURCC('8', 'B', 'P', 'S'), cap.get(CV_CAP_PROP_FPS), Size(width, height), true);
+        out.open(output, CV_FOURCC('8', 'B', 'P', 'S'), cap.get(CV_CAP_PROP_FPS), Size(width, height), true);
 
-	if(!out.isOpened()) {
-	    fprintf(stderr, "Failed to open output video file.\n");
-	    return -1;
-	}
+        if(!out.isOpened()) {
+            fprintf(stderr, "Failed to open output video file.\n");
+            return -1;
+        }
     }
 
     Mat frame0;
     cap >> frame0;
     srand(time(0));
     for (int i=0; i<height; i++) {
-	for (int j=0; j<width; j++) {
-	    for (int k=0; k<K; k++) {
-		g[i][j][k][0].mean = rand() % 256;
-		g[i][j][k][1].mean = rand() % 256;
-		g[i][j][k][2].mean = rand() % 256;
-		g[i][j][k][0].variance = INIT_VARIANCE;
-		g[i][j][k][1].variance = INIT_VARIANCE;
-		g[i][j][k][2].variance = INIT_VARIANCE;
-		w[i][j][k] = 0;
-	    }
-	    g[i][j][0][0].mean = frame0.at<cv::Vec3b>(i, j)[0];
-	    g[i][j][0][1].mean = frame0.at<cv::Vec3b>(i, j)[1];
-	    g[i][j][0][2].mean = frame0.at<cv::Vec3b>(i, j)[2];    
-	    w[i][j][0] = 1;
-	}
+        for (int j=0; j<width; j++) {
+            for (int k=0; k<K; k++) {
+                g(i, j, k, 0).mean = rand() % 256;
+                g(i, j, k, 1).mean = rand() % 256;
+                g(i, j, k, 2).mean = rand() % 256;
+                g(i, j, k, 0).variance = INIT_VARIANCE;
+                g(i, j, k, 1).variance = INIT_VARIANCE;
+                g(i, j, k, 2).variance = INIT_VARIANCE;
+                w[i][j][k] = 0;
+            }
+            g(i, j, 0, 0).mean = frame0.at<cv::Vec3b>(i, j)[0];
+            g(i, j, 0, 1).mean = frame0.at<cv::Vec3b>(i, j)[1];
+            g(i, j, 0, 2).mean = frame0.at<cv::Vec3b>(i, j)[2];    
+            w[i][j][0] = 1;
+        }
     }
 
     cudaStream_t stream0, stream1;
@@ -186,7 +201,7 @@ int main(int argc, char **argv)
     struct gaussian *d_g;
     size_t size_g_per_stream = sizeof(struct gaussian) * 3 * width * height * K / 2;
     CUDA_CHECK_RETURN(cudaMalloc((void **) &d_g, sizeof(struct gaussian) * 3 * width * height * K));
-    CUDA_CHECK_RETURN(cudaMemcpy(d_g, g, sizeof(struct gaussian) * 3 * width * height * K, cudaMemcpyHostToDevice));
+    CUDA_CHECK_RETURN(cudaMemcpy(d_g, h_g, sizeof(struct gaussian) * 3 * width * height * K, cudaMemcpyHostToDevice));
 
     // data copy of weight
     float *d_w;
@@ -232,7 +247,7 @@ int main(int argc, char **argv)
     CUDA_CHECK_RETURN(cudaMemcpyAsync(foreground[turn], d_f, size_f_per_stream, cudaMemcpyDeviceToHost, stream0));
     CUDA_CHECK_RETURN(cudaMemcpyAsync((char*)(foreground[turn]) + size_f_per_stream, (char*)(d_f) + size_f_per_stream, size_f_per_stream, cudaMemcpyDeviceToHost, stream1));
 
-    CUDA_CHECK_RETURN(cudaDeviceSynchronize());	// Wait for the GPU launched work to complete
+    CUDA_CHECK_RETURN(cudaDeviceSynchronize()); // Wait for the GPU launched work to complete
     CUDA_CHECK_RETURN(cudaGetLastError());
 
     turn = 1 - turn;
@@ -240,7 +255,7 @@ int main(int argc, char **argv)
     for(;;)
     {
         cap >> frame; // get a new frame from camera
-	if(frame.empty()) break;
+        if(frame.empty()) break;
 
         // data copy of image 
         for (int i=0; i<height; i++) {
@@ -349,17 +364,17 @@ int main(int argc, char **argv)
         }
 
 
-	if(out.isOpened()) {
-	    out << frame;
-	} else {
-	    cv::imshow("output", frame);
-	    waitKey(1);
-	}
+        if(out.isOpened()) {
+            out << frame;
+        } else {
+            cv::imshow("output", frame);
+            waitKey(1);
+        }
 
-	CUDA_CHECK_RETURN(cudaDeviceSynchronize());	// Wait for the GPU launched work to complete
-	CUDA_CHECK_RETURN(cudaGetLastError());
+        CUDA_CHECK_RETURN(cudaDeviceSynchronize());     // Wait for the GPU launched work to complete
+        CUDA_CHECK_RETURN(cudaGetLastError());
 
-	turn = 1 - turn;
+        turn = 1 - turn;
     }
     return 0;
 }

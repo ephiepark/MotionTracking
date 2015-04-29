@@ -197,3 +197,4 @@ float gaussian_prob_density_function(pixel x_t, float mean, float variance) {
 */
 
 #endif
+

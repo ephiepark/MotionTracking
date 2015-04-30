@@ -1,6 +1,4 @@
 
-videoread
-
 *.png
 
 *.txt~
@@ -16,11 +14,5 @@ src/motiontracking
 src/motiontracking.dSYM/Contents/Resources/DWARF/motiontracking
 
 src/a.out
-
-src/videoplayback.mp4
-
-*.mov
-
-*.avi
 
 src/cpu_motiontracking

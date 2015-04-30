@@ -21,8 +21,8 @@ const float DEVIATION_SQ_THRESH =  49;
 const float INIT_VARIANCE = 3;
 const float INIT_MIXPROP = 0.00001;
 const float BACKGROUND_THRESH = 0.9;
-const float COMPONENT_THRESH = 100;
-const int DISTANCE_THRESH = 100000;
+const float COMPONENT_THRESH = 200;
+const int DISTANCE_THRESH = 2500;
 const int SIZE_THRESH = 1000000;
 
 int width, height;

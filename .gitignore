@@ -22,3 +22,5 @@ src/videoplayback.mp4
 *.mov
 
 *.avi
+
+src/cpu_motiontracking
